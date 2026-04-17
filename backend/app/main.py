@@ -102,6 +102,10 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
+@app.post("/users/{user_id}/portfolios/", response_model=schemas.Portfolio)
+def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):
+    return crud.create_portfolio(db=db, user_id=user_id, name=portfolio.name)
+
 # --- Realtime WebSocket Endpoint ---
 
 @app.websocket("/ws/prices")
