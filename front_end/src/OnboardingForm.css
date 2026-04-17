@@ -1,0 +1,227 @@
+.onboarding-page {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.onboarding-nav {
+  padding: 20px 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.onboarding-container {
+  flex: 1;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 60px 24px 80px;
+}
+
+.onboarding-header {
+  margin-bottom: 36px;
+}
+
+.onboarding-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 10px 0 12px;
+  line-height: 1.2;
+}
+
+.onboarding-header p {
+  color: var(--text-muted, #9ca3af);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Form */
+.onboarding-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+}
+
+.form-input,
+.form-textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+  padding: 12px 16px;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--accent, #7c3aed);
+}
+
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted, #9ca3af);
+}
+
+.form-error {
+  color: #f87171;
+  font-size: 0.875rem;
+  padding: 10px 14px;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 8px;
+  margin: 0;
+}
+
+.form-submit {
+  align-self: flex-start;
+}
+
+/* Risk pills */
+.risk-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.risk-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: border-color 0.2s, background 0.2s;
+  user-select: none;
+}
+
+.risk-pill input {
+  display: none;
+}
+
+.risk-pill:hover {
+  border-color: var(--accent, #7c3aed);
+}
+
+.risk-pill.selected {
+  border-color: var(--accent, #7c3aed);
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--accent, #7c3aed);
+}
+
+/* Review card */
+.review-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  font-size: 0.95rem;
+}
+
+.review-label {
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.review-value {
+  text-align: right;
+  font-weight: 600;
+}
+
+.goal-badge,
+.risk-badge {
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--accent, #7c3aed);
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.review-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Generating state */
+.generating-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 0;
+  gap: 20px;
+}
+
+.generating-state h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.generating-state p {
+  color: var(--text-muted, #9ca3af);
+  max-width: 420px;
+  line-height: 1.6;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(124, 58, 237, 0.2);
+  border-top-color: var(--accent, #7c3aed);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Button ghost */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+  padding: 10px 24px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}

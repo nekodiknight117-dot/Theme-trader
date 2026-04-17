@@ -40,4 +40,4 @@ class UserProfile(UserProfileBase):
     id: int
     portfolios: List[Portfolio] = []
     class Config:
-        orm_mode = True
+        from_attributes = True

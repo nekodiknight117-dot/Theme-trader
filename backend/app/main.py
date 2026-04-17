@@ -1,6 +1,8 @@
 import asyncio
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 
@@ -9,7 +11,7 @@ from .database import engine, get_db
 from .alpaca_stream import active_connections, start_alpaca_stream
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
-from .llm_service import generate_investment_rationale
+from .llm_service import generate_investment_rationale, parse_user_interests
 from .cache_service import get_cached_value, set_cached_value
 
 # Create the database tables
@@ -36,6 +38,20 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "Welcome to the Theme-Trader Backend"}
+
+# --- Interest Parsing Endpoint ---
+
+class ParseInterestsRequest(BaseModel):
+    raw_text: str
+
+@app.post("/api/parse-interests")
+async def parse_interests(body: ParseInterestsRequest):
+    """
+    Sends the user's free-text description to the LLM and returns structured
+    interests and an inferred investment goal.
+    """
+    result = await parse_user_interests(body.raw_text)
+    return result
 
 # --- Assessment & Research Pipeline Endpoint ---
 
@@ -112,6 +128,13 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
+
+@app.get("/users/{user_id}/portfolios/", response_model=List[schemas.Portfolio])
+def get_portfolios_for_user(user_id: int, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id=user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return crud.get_portfolios_for_user(db, user_id=user_id)
 
 @app.post("/users/{user_id}/portfolios/", response_model=schemas.Portfolio)
 def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):

@@ -1,0 +1,147 @@
+2026-04-17 16:56:38,492 - INFO - --- Testing CRUD Operations ---
+2026-04-17 16:56:38,494 - INFO - Creating User...
+2026-04-17 16:56:38,564 - INFO - HTTP Request: POST http://testserver/users/ "HTTP/1.1 200 OK"
+2026-04-17 16:56:38,564 - INFO - Created User: {'username': 'test_investor', 'risk_tolerance': 'high', 'interests': 'tech, space', 'id': 1, 'portfolios': []}
+2026-04-17 16:56:38,564 - INFO - Fetching User ID 1...
+2026-04-17 16:56:38,570 - INFO - HTTP Request: GET http://testserver/users/1 "HTTP/1.1 200 OK"
+2026-04-17 16:56:38,570 - INFO - Fetched User: {'username': 'test_investor', 'risk_tolerance': 'high', 'interests': 'tech, space', 'id': 1, 'portfolios': []}
+2026-04-17 16:56:38,570 - INFO - Creating Portfolio for User 1...
+2026-04-17 16:56:38,599 - INFO - HTTP Request: POST http://testserver/users/1/portfolios/ "HTTP/1.1 200 OK"
+2026-04-17 16:56:38,599 - INFO - Created Portfolio: {'name': 'High Risk Tech Strategy', 'id': 1, 'user_id': 1, 'assets': []}
+2026-04-17 16:56:38,600 - INFO - CRUD Tests Passed!
+
+2026-04-17 16:56:38,600 - INFO - --- Testing Assessment Pipeline (Tavily + LLM) ---
+2026-04-17 16:56:38,600 - INFO - Running assessment for User 1... This may take a moment.
+2026-04-17 16:56:57,366 - INFO - Retrying request to /chat/completions in 0.464833 seconds
+2026-04-17 16:57:02,835 - INFO - Retrying request to /chat/completions in 0.858348 seconds
+2026-04-17 16:57:13,747 - INFO - Retrying request to /chat/completions in 0.385821 seconds
+2026-04-17 16:57:19,153 - INFO - Retrying request to /chat/completions in 0.949769 seconds
+2026-04-17 16:57:30,145 - INFO - Retrying request to /chat/completions in 0.454086 seconds
+2026-04-17 16:57:35,623 - INFO - Retrying request to /chat/completions in 0.955058 seconds
+2026-04-17 16:57:46,619 - INFO - Retrying request to /chat/completions in 0.416730 seconds
+2026-04-17 16:57:52,053 - INFO - Retrying request to /chat/completions in 0.980883 seconds
+2026-04-17 16:58:03,080 - INFO - Retrying request to /chat/completions in 0.411985 seconds
+2026-04-17 16:58:08,503 - INFO - Retrying request to /chat/completions in 0.992827 seconds
+2026-04-17 16:58:14,553 - INFO - HTTP Request: POST http://testserver/api/assess?user_id=1 "HTTP/1.1 200 OK"
+2026-04-17 16:58:14,554 - INFO - Successfully generated portfolio: High Risk Theme Portfolio
+2026-04-17 16:58:14,555 - INFO - Total assets selected: 5
+2026-04-17 16:58:14,555 - INFO -   - Ticker: JNJ (Blue Chip)
+2026-04-17 16:58:14,555 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 16:58:14,555 - INFO -   - Ticker: KVUE (IPO)
+2026-04-17 16:58:14,555 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 16:58:14,555 - INFO -   - Ticker: CART (IPO)
+2026-04-17 16:58:14,555 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 16:58:14,555 - INFO -   - Ticker: AMD (Rising Star)
+2026-04-17 16:58:14,555 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 16:58:14,555 - INFO -   - Ticker: NVDA (Rising Star)
+2026-04-17 16:58:14,555 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 16:58:14,555 - INFO - Assessment Pipeline Tests Passed!
+
+2026-04-17 16:58:14,555 - INFO - --- Testing WebSocket Connection ---
+2026-04-17 16:58:14,563 - INFO - Successfully connected to WebSocket endpoint: /ws/prices
+2026-04-17 16:58:14,563 - INFO - Successfully sent message to WebSocket.
+2026-04-17 16:58:14,563 - INFO - WebSocket Test Passed!
+2026-04-17 16:58:14,565 - INFO - All basic tests completed.
+2026-04-17 17:08:46,257 - INFO - --- Testing CRUD Operations ---
+2026-04-17 17:08:46,258 - INFO - Creating User...
+2026-04-17 17:08:46,306 - INFO - HTTP Request: POST http://testserver/users/ "HTTP/1.1 400 Bad Request"
+2026-04-17 17:08:46,307 - INFO - User already exists. Fetching user instead.
+2026-04-17 17:08:46,307 - INFO - Fetching User ID 1...
+2026-04-17 17:08:46,331 - INFO - HTTP Request: GET http://testserver/users/1 "HTTP/1.1 200 OK"
+2026-04-17 17:08:46,331 - INFO - Fetched User: {'username': 'test_investor', 'risk_tolerance': 'high', 'interests': 'tech, space', 'id': 1, 'portfolios': [{'name': 'High Risk Tech Strategy', 'id': 1, 'user_id': 1, 'assets': []}, {'name': 'High Risk Theme Portfolio', 'id': 2, 'user_id': 1, 'assets': [{'ticker': 'JNJ', 'category': 'Blue Chip', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 1, 'portfolio_id': 2}, {'ticker': 'KVUE', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 2, 'portfolio_id': 2}, {'ticker': 'CART', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 3, 'portfolio_id': 2}, {'ticker': 'AMD', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 4, 'portfolio_id': 2}, {'ticker': 'NVDA', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 5, 'portfolio_id': 2}]}]}
+2026-04-17 17:08:46,331 - INFO - Creating Portfolio for User 1...
+2026-04-17 17:08:46,387 - INFO - HTTP Request: POST http://testserver/users/1/portfolios/ "HTTP/1.1 200 OK"
+2026-04-17 17:08:46,387 - INFO - Created Portfolio: {'name': 'High Risk Tech Strategy', 'id': 3, 'user_id': 1, 'assets': []}
+2026-04-17 17:08:46,387 - INFO - CRUD Tests Passed!
+
+2026-04-17 17:08:46,387 - INFO - --- Testing Assessment Pipeline (Tavily + LLM) ---
+2026-04-17 17:08:46,388 - INFO - Running assessment for User 1... This may take a moment.
+2026-04-17 17:08:59,870 - INFO - Retrying request to /chat/completions in 0.467831 seconds
+2026-04-17 17:09:05,358 - INFO - Retrying request to /chat/completions in 0.992014 seconds
+2026-04-17 17:09:16,400 - INFO - Retrying request to /chat/completions in 0.458280 seconds
+2026-04-17 17:09:21,873 - INFO - Retrying request to /chat/completions in 0.938745 seconds
+2026-04-17 17:09:32,853 - INFO - Retrying request to /chat/completions in 0.468003 seconds
+2026-04-17 17:09:38,345 - INFO - Retrying request to /chat/completions in 0.802941 seconds
+2026-04-17 17:09:49,215 - INFO - Retrying request to /chat/completions in 0.403605 seconds
+2026-04-17 17:09:54,648 - INFO - Retrying request to /chat/completions in 0.759770 seconds
+2026-04-17 17:10:05,432 - INFO - Retrying request to /chat/completions in 0.448173 seconds
+2026-04-17 17:10:10,889 - INFO - Retrying request to /chat/completions in 0.891270 seconds
+2026-04-17 17:10:16,796 - INFO - HTTP Request: POST http://testserver/api/assess?user_id=1 "HTTP/1.1 200 OK"
+2026-04-17 17:10:16,797 - INFO - Successfully generated portfolio: High Risk Theme Portfolio
+2026-04-17 17:10:16,797 - INFO - Total assets selected: 5
+2026-04-17 17:10:16,797 - INFO -   - Ticker: JNJ (Blue Chip)
+2026-04-17 17:10:16,797 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:10:16,797 - INFO -   - Ticker: KVUE (IPO)
+2026-04-17 17:10:16,797 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:10:16,797 - INFO -   - Ticker: CART (IPO)
+2026-04-17 17:10:16,797 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:10:16,798 - INFO -   - Ticker: AMD (Rising Star)
+2026-04-17 17:10:16,798 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:10:16,798 - INFO -   - Ticker: NVDA (Rising Star)
+2026-04-17 17:10:16,798 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:10:16,798 - INFO - Assessment Pipeline Tests Passed!
+
+2026-04-17 17:10:16,798 - INFO - --- Testing WebSocket Connection ---
+2026-04-17 17:10:16,802 - INFO - Successfully connected to WebSocket endpoint: /ws/prices
+2026-04-17 17:10:16,802 - INFO - Successfully sent message to WebSocket.
+2026-04-17 17:10:16,802 - INFO - WebSocket Test Passed!
+2026-04-17 17:10:16,804 - INFO - All basic tests completed.
+2026-04-17 17:53:15,881 - INFO - --- Testing CRUD Operations ---
+2026-04-17 17:53:15,882 - INFO - Creating User...
+2026-04-17 17:53:15,934 - INFO - HTTP Request: POST http://testserver/users/ "HTTP/1.1 400 Bad Request"
+2026-04-17 17:53:15,935 - INFO - User already exists. Fetching user instead.
+2026-04-17 17:53:15,935 - INFO - Fetching User ID 1...
+2026-04-17 17:53:16,031 - INFO - HTTP Request: GET http://testserver/users/1 "HTTP/1.1 200 OK"
+2026-04-17 17:53:16,031 - INFO - Fetched User: {'username': 'test_investor', 'risk_tolerance': 'high', 'interests': 'tech, space', 'id': 1, 'portfolios': [{'name': 'High Risk Tech Strategy', 'id': 1, 'user_id': 1, 'assets': []}, {'name': 'High Risk Theme Portfolio', 'id': 2, 'user_id': 1, 'assets': [{'ticker': 'JNJ', 'category': 'Blue Chip', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 1, 'portfolio_id': 2}, {'ticker': 'KVUE', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 2, 'portfolio_id': 2}, {'ticker': 'CART', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 3, 'portfolio_id': 2}, {'ticker': 'AMD', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 4, 'portfolio_id': 2}, {'ticker': 'NVDA', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 5, 'portfolio_id': 2}]}, {'name': 'High Risk Tech Strategy', 'id': 3, 'user_id': 1, 'assets': []}, {'name': 'High Risk Theme Portfolio', 'id': 4, 'user_id': 1, 'assets': [{'ticker': 'JNJ', 'category': 'Blue Chip', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 6, 'portfolio_id': 4}, {'ticker': 'KVUE', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 7, 'portfolio_id': 4}, {'ticker': 'CART', 'category': 'IPO', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 8, 'portfolio_id': 4}, {'ticker': 'AMD', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 9, 'portfolio_id': 4}, {'ticker': 'NVDA', 'category': 'Rising Star', 'rationale': 'System was unable to generate a personalized rationale at this time.', 'id': 10, 'portfolio_id': 4}]}]}
+2026-04-17 17:53:16,032 - INFO - Creating Portfolio for User 1...
+2026-04-17 17:53:16,051 - INFO - HTTP Request: POST http://testserver/users/1/portfolios/ "HTTP/1.1 200 OK"
+2026-04-17 17:53:16,052 - INFO - Created Portfolio: {'name': 'High Risk Tech Strategy', 'id': 5, 'user_id': 1, 'assets': []}
+2026-04-17 17:53:16,052 - INFO - CRUD Tests Passed!
+
+2026-04-17 17:53:16,052 - INFO - --- Testing Assessment Pipeline (Tavily + LLM) ---
+2026-04-17 17:53:16,052 - INFO - Running assessment for User 1... This may take a moment.
+2026-04-17 17:53:29,457 - INFO - Retrying request to /chat/completions in 0.428272 seconds
+2026-04-17 17:53:34,893 - INFO - Retrying request to /chat/completions in 0.936267 seconds
+2026-04-17 17:53:45,877 - INFO - Retrying request to /chat/completions in 0.443173 seconds
+2026-04-17 17:53:51,331 - INFO - Retrying request to /chat/completions in 0.865410 seconds
+2026-04-17 17:54:02,219 - INFO - Retrying request to /chat/completions in 0.383956 seconds
+2026-04-17 17:54:07,624 - INFO - Retrying request to /chat/completions in 0.809021 seconds
+2026-04-17 17:54:18,472 - INFO - Retrying request to /chat/completions in 0.380983 seconds
+2026-04-17 17:54:23,869 - INFO - Retrying request to /chat/completions in 0.928863 seconds
+2026-04-17 17:54:34,835 - INFO - Retrying request to /chat/completions in 0.465812 seconds
+2026-04-17 17:54:40,325 - INFO - Retrying request to /chat/completions in 0.931718 seconds
+2026-04-17 17:54:46,294 - INFO - HTTP Request: POST http://testserver/api/assess?user_id=1 "HTTP/1.1 200 OK"
+2026-04-17 17:54:46,294 - INFO - Successfully generated portfolio: High Risk Theme Portfolio
+2026-04-17 17:54:46,294 - INFO - Total assets selected: 5
+2026-04-17 17:54:46,294 - INFO -   - Ticker: JNJ (Blue Chip)
+2026-04-17 17:54:46,294 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:54:46,294 - INFO -   - Ticker: KVUE (IPO)
+2026-04-17 17:54:46,294 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:54:46,294 - INFO -   - Ticker: CART (IPO)
+2026-04-17 17:54:46,294 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:54:46,294 - INFO -   - Ticker: AMD (Rising Star)
+2026-04-17 17:54:46,294 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:54:46,294 - INFO -   - Ticker: NVDA (Rising Star)
+2026-04-17 17:54:46,294 - INFO -   - Rationale Preview: System was unable to generate a personalized rationale at this time....
+
+2026-04-17 17:54:46,294 - INFO - Assessment Pipeline Tests Passed!
+
+2026-04-17 17:54:46,294 - INFO - --- Testing WebSocket Connection ---
+2026-04-17 17:54:46,299 - INFO - Successfully connected to WebSocket endpoint: /ws/prices
+2026-04-17 17:54:46,299 - INFO - Successfully sent message to WebSocket.
+2026-04-17 17:54:46,299 - INFO - WebSocket Test Passed!
+2026-04-17 17:54:46,301 - INFO - All basic tests completed.

@@ -4,7 +4,7 @@ from app import models
 
 # Ensure tables exist
 models.Base.metadata.create_all(bind=engine)
-
+#create  moere hobbies
 HOBBIES = [
     "gaming", "photography", "traveling", "reading sci-fi", "gardening", 
     "fitness", "cooking", "crypto mining", "astronomy", "cars", "DIY electronics",
