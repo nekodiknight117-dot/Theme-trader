@@ -33,3 +33,10 @@ class Asset(Base):
     rationale = Column(String) # AI generated reason to invest
     
     portfolio = relationship("Portfolio", back_populates="assets")
+
+class CacheEntry(Base):
+    __tablename__ = "cache_entries"
+    
+    key = Column(String, primary_key=True, index=True)
+    value = Column(String)
+    expires_at = Column(String) # Storing as ISO formatted string for simplicity across sqlite/postgres

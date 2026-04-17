@@ -10,6 +10,7 @@ from .alpaca_stream import active_connections, start_alpaca_stream
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale
+from .cache_service import get_cached_value, set_cached_value
 
 # Create the database tables
 models.Base.metadata.create_all(bind=engine)
@@ -61,17 +62,27 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
         ticker = asset_data["ticker"]
         category = asset_data["category"]
         
-        # 2. Get Qualitative Research
-        research = get_company_research(ticker, category)
+        # 2. Get Qualitative Research (with Caching)
+        cache_key_tavily = f"tavily:{ticker}"
+        research = get_cached_value(db, cache_key_tavily)
+        if not research:
+            research = get_company_research(ticker, category)
+            if research and not research.startswith("Error") and not research.startswith("Could not"):
+                set_cached_value(db, cache_key_tavily, research, ttl_hours=24)
         
-        # 3. Generate LLM Pitch
-        rationale = await generate_investment_rationale(
-            ticker=ticker, 
-            category=category, 
-            quantitative_data=asset_data, 
-            qualitative_research=research, 
-            risk_tolerance=user.risk_tolerance
-        )
+        # 3. Generate LLM Pitch (with Caching)
+        cache_key_llm = f"llm:rationale:{ticker}:{user.risk_tolerance}"
+        rationale = get_cached_value(db, cache_key_llm)
+        if not rationale:
+            rationale = await generate_investment_rationale(
+                ticker=ticker, 
+                category=category, 
+                quantitative_data=asset_data, 
+                qualitative_research=research, 
+                risk_tolerance=user.risk_tolerance
+            )
+            if rationale and not rationale.startswith("System was unable"):
+                set_cached_value(db, cache_key_llm, rationale, ttl_hours=24)
         
         # 4. Save to Database
         crud.add_asset_to_portfolio(
