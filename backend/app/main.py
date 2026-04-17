@@ -7,25 +7,23 @@ from contextlib import asynccontextmanager
 from . import models, schemas, crud
 from .database import engine, get_db
 from .alpaca_stream import active_connections, start_alpaca_stream
+from .stock_selector import get_algorithmic_portfolio
+from .tavily_research import get_company_research
+from .llm_service import generate_investment_rationale
 
 # Create the database tables
 models.Base.metadata.create_all(bind=engine)
 
-# Lifecycle manager for FastAPI to start background tasks (like Alpaca stream)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load env variables here if python-dotenv is added later
     import dotenv
     dotenv.load_dotenv()
-    
     # Start the Alpaca stream in the background
     asyncio.create_task(start_alpaca_stream())
     yield
-    # Cleanup on shutdown
 
 app = FastAPI(title="Theme-Trader API", description="Hackathon Backend", lifespan=lifespan)
 
-# Allow CORS for the frontend to connect
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,6 +35,56 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "Welcome to the Theme-Trader Backend"}
+
+# --- Assessment & Research Pipeline Endpoint ---
+
+@app.post("/api/assess", response_model=schemas.Portfolio)
+async def run_assessment(user_id: int, db: Session = Depends(get_db)):
+    """
+    Core pipeline: Takes a user, uses algorithmic stock selection based on their risk tolerance,
+    pulls qualitative research from Tavily, synthesizes it via LLM, and creates a portfolio.
+    """
+    user = crud.get_user(db, user_id=user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # 1. Select basic portfolio mix algorithmically
+    raw_portfolio = get_algorithmic_portfolio(user.risk_tolerance)
+    
+    # Create the portfolio in DB
+    portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"
+    db_portfolio = crud.create_portfolio(db=db, user_id=user.id, name=portfolio_name)
+    
+    # Process each asset: fetch research, generate rationale, and save
+    # Note: Running these sequentially for simplicity, but could be gathered concurrently with asyncio.gather
+    for asset_data in raw_portfolio:
+        ticker = asset_data["ticker"]
+        category = asset_data["category"]
+        
+        # 2. Get Qualitative Research
+        research = get_company_research(ticker, category)
+        
+        # 3. Generate LLM Pitch
+        rationale = await generate_investment_rationale(
+            ticker=ticker, 
+            category=category, 
+            quantitative_data=asset_data, 
+            qualitative_research=research, 
+            risk_tolerance=user.risk_tolerance
+        )
+        
+        # 4. Save to Database
+        crud.add_asset_to_portfolio(
+            db=db, 
+            portfolio_id=db_portfolio.id, 
+            ticker=ticker, 
+            category=category, 
+            rationale=rationale
+        )
+        
+    # Return the newly hydrated portfolio
+    db.refresh(db_portfolio)
+    return db_portfolio
 
 # --- Basic CRUD Endpoints ---
 
@@ -54,10 +102,6 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
-@app.post("/users/{user_id}/portfolios/", response_model=schemas.Portfolio)
-def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):
-    return crud.create_portfolio(db=db, user_id=user_id, name=portfolio.name)
-
 # --- Realtime WebSocket Endpoint ---
 
 @app.websocket("/ws/prices")
@@ -66,8 +110,6 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            # Keep the connection alive, waiting for client messages if any
             data = await websocket.receive_text()
-            # We can parse client messages here to change which tickers we subscribe to in the future
     except WebSocketDisconnect:
         active_connections.remove(websocket)
