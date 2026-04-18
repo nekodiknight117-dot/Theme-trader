@@ -22,6 +22,18 @@ def _flatten_tickers(tickers) -> List[str]:
     return flat
 
 
+def fetch_company_names(tickers: List[str]) -> Dict[str, str]:
+    """Returns a dict of {ticker: company short name} using yfinance. Falls back to the ticker itself on any error."""
+    names = {}
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).info
+            names[ticker] = info.get("shortName") or info.get("longName") or ticker
+        except Exception:
+            names[ticker] = ticker
+    return names
+
+
 def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
     """
     Fetches 6-month historical data for a list of tickers and calculates:
@@ -127,6 +139,12 @@ async def get_algorithmic_portfolio(risk_tolerance: str, interests: str = "") ->
                 "projected_cagr": row["return_6m"] * 2,  # rough annualised projection
                 "volatility":     row["volatility"],
             })
+
+    # Attach human-readable company names
+    all_tickers = [a["ticker"] for a in portfolio]
+    names = fetch_company_names(all_tickers)
+    for asset in portfolio:
+        asset["company_name"] = names.get(asset["ticker"], asset["ticker"])
 
     return portfolio
 

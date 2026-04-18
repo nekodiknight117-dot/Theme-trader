@@ -197,6 +197,19 @@
   white-space: nowrap;
 }
 
+.asset-ticker-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-company-name {
+  font-size: 0.75rem;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
 .asset-rationale {
   display: flex;
   flex-direction: column;

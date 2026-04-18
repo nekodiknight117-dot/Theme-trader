@@ -112,10 +112,11 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
         
         # 4. Save to Database
         crud.add_asset_to_portfolio(
-            db=db, 
-            portfolio_id=db_portfolio.id, 
-            ticker=ticker, 
-            category=category, 
+            db=db,
+            portfolio_id=db_portfolio.id,
+            ticker=ticker,
+            name=asset_data.get("company_name", ticker),
+            category=category,
             rationale=rationale
         )
         

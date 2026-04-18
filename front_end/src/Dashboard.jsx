@@ -54,7 +54,12 @@ function AssetCard({ asset, livePrice }) {
     <div className="asset-card">
       <div className="asset-card-header">
         <div className="asset-ticker-row">
-          <span className="asset-ticker">{asset.ticker}</span>
+          <div className="asset-ticker-group">
+            <span className="asset-ticker">{asset.ticker}</span>
+            {asset.name && asset.name !== asset.ticker && (
+              <span className="asset-company-name">{asset.name}</span>
+            )}
+          </div>
           {livePrice != null && (
             <span className="asset-live-price">${livePrice.toFixed(2)}</span>
           )}
