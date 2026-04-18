@@ -19,7 +19,24 @@ uv sync
 This command reads the `uv.lock` file and perfectly recreates the environment, installing all dependencies like `fastapi`, `sqlalchemy`, `yfinance`, `openai`, and `tavily-python`. 
 
 ### 3. Environment Variables
-Copy `.env.example` to `.env` and fill in the required API keys (Alpaca, Tavily, Featherless/LM Studio).
+A `.env.example` template is provided in the **project root** (the `Theme-trader/` folder).
+Copy it to `.env` in the **same root directory** and fill in the required API keys:
+
+```bash
+# Mac / Linux
+cp .env.example .env
+
+# Windows (PowerShell)
+copy .env.example .env
+```
+
+Keys you need to fill in:
+- `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` — from https://app.alpaca.markets/paper/dashboard/overview
+- `TAVILY_API_KEY` — from https://app.tavily.com/
+- `FEATHERLESS_API_KEY` — from https://featherless.ai → Dashboard → API Keys
+
+> **Important:** The `.env` file must live in the project **root** (`Theme-trader/.env`), **not** inside the `backend/` folder.
+
 
 ### 4. Running the Server
 To run the FastAPI server, use `uv run`. This automatically uses the isolated environment:

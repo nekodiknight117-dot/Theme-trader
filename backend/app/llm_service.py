@@ -3,7 +3,8 @@ import json
 import httpx
 from pathlib import Path
 
-# Explicitly load the root-level .env (two levels up: app/ -> backend/ -> project root)
+# Explicitly load the root-level .env — works regardless of where uvicorn is launched from
+# Path: app/llm_service.py -> app/ -> backend/ -> project root
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 try:
     import dotenv
