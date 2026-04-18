@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -30,8 +30,10 @@ class Asset(Base):
     ticker = Column(String, index=True)
     name = Column(String)
     category = Column(String)  # e.g., "ETF", "Blue Chip", "IPO", "Rising Star"
-    rationale = Column(String) # AI generated reason to invest
-    
+    rationale = Column(String)              # AI generated reason to invest
+    weight = Column(Float, nullable=True)          # portfolio weight 0.0–1.0, sum = 1
+    projected_cagr = Column(Float, nullable=True)  # annualised return estimate
+
     portfolio = relationship("Portfolio", back_populates="assets")
 
 class CacheEntry(Base):

@@ -72,7 +72,13 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
         
     # 1. Select portfolio algorithmically, personalised by user interests
     raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
-    
+
+    # Compute portfolio weights proportional to projected_cagr.
+    # Clamp to 0.01 minimum so declining stocks still receive a small slice.
+    total_cagr = sum(max(a.get("projected_cagr", 0), 0.01) for a in raw_portfolio) or 1
+    for a in raw_portfolio:
+        a["weight"] = round(max(a.get("projected_cagr", 0), 0.01) / total_cagr, 4)
+
     # Create the portfolio in DB
     portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"
     db_portfolio = crud.create_portfolio(db=db, user_id=user.id, name=portfolio_name)
@@ -108,11 +114,13 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
         
         # 4. Save to Database
         crud.add_asset_to_portfolio(
-            db=db, 
-            portfolio_id=db_portfolio.id, 
-            ticker=ticker, 
-            category=category, 
-            rationale=rationale
+            db=db,
+            portfolio_id=db_portfolio.id,
+            ticker=ticker,
+            category=category,
+            rationale=rationale,
+            weight=asset_data.get("weight"),
+            projected_cagr=asset_data.get("projected_cagr"),
         )
         
     # Return the newly hydrated portfolio

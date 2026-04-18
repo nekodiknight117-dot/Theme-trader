@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import './Dashboard.css'
+import FundViz from './FundViz.jsx'
 
 const API = 'http://localhost:8000'
 const WS_URL = 'ws://localhost:8000/ws/prices'
@@ -71,29 +72,33 @@ function CategorySection({ category, assets, livePrices }) {
 export default function Dashboard() {
   const { userId } = useParams()
   const [portfolio, setPortfolio] = useState(null)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [livePrices, setLivePrices] = useState({})
   const [wsStatus, setWsStatus] = useState('connecting')
   const wsRef = useRef(null)
 
-  // Fetch portfolio on mount
+  // Fetch portfolio and user on mount
   useEffect(() => {
-    async function fetchPortfolio() {
+    async function fetchData() {
       try {
-        const res = await fetch(`${API}/users/${userId}/portfolios/`)
-        if (!res.ok) throw new Error(`Server error: ${res.status}`)
-        const portfolios = await res.json()
+        const [portfoliosRes, userRes] = await Promise.all([
+          fetch(`${API}/users/${userId}/portfolios/`),
+          fetch(`${API}/users/${userId}`),
+        ])
+        if (!portfoliosRes.ok) throw new Error(`Server error: ${portfoliosRes.status}`)
+        const portfolios = await portfoliosRes.json()
         if (portfolios.length === 0) throw new Error('No portfolio found for this user.')
-        // Show the most recently created portfolio (last in list)
         setPortfolio(portfolios[portfolios.length - 1])
+        if (userRes.ok) setUser(await userRes.json())
       } catch (err) {
         setError(err.message)
       } finally {
         setLoading(false)
       }
     }
-    fetchPortfolio()
+    fetchData()
   }, [userId])
 
   // WebSocket for live prices
@@ -172,6 +177,11 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        <FundViz
+          assets={portfolio.assets}
+          riskTolerance={user?.risk_tolerance}
+        />
 
         {orderedCategories.map((cat) => (
           <CategorySection

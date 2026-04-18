@@ -5,6 +5,8 @@ class AssetBase(BaseModel):
     ticker: str
     category: str
     rationale: Optional[str] = None
+    weight: Optional[float] = None
+    projected_cagr: Optional[float] = None
 
 class AssetCreate(AssetBase):
     pass
