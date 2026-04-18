@@ -101,7 +101,8 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
                 category=category, 
                 quantitative_data=asset_data, 
                 qualitative_research=research, 
-                risk_tolerance=user.risk_tolerance
+                risk_tolerance=user.risk_tolerance,
+                interests=interests_slug
             )
             if rationale and not rationale.startswith("System was unable"):
                 set_cached_value(db, cache_key_llm, rationale, ttl_hours=24)
