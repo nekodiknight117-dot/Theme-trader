@@ -198,10 +198,31 @@
 }
 
 .asset-rationale {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.asset-rationale-heading {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text, #f3f4f6);
+  margin: 0;
+  opacity: 0.7;
+}
+
+.asset-rationale-body {
   font-size: 0.875rem;
   color: var(--text-muted, #9ca3af);
   line-height: 1.65;
   margin: 0;
+}
+
+.asset-rationale-body strong {
+  color: var(--text, #f3f4f6);
+  font-weight: 600;
 }
 
 /* Loading / error states */

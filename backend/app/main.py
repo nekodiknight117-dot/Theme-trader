@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from . import models, schemas, crud
 from .database import engine, get_db
-from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream
+from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream, update_stream_tickers
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale, parse_user_interests
@@ -72,6 +72,10 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
         
     # 1. Select portfolio algorithmically, personalised by user interests
     raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
+
+    # Update the Alpaca stream to watch the actual portfolio tickers
+    portfolio_tickers = [a["ticker"] for a in raw_portfolio]
+    asyncio.create_task(update_stream_tickers(portfolio_tickers))
     
     # Create the portfolio in DB
     portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"

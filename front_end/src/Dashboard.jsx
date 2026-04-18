@@ -23,8 +23,32 @@ function groupByCategory(assets) {
   return groups
 }
 
+// Renders a string with **bold** markers into React elements
+function renderInline(text) {
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  )
+}
+
+// Splits rationale into an optional heading line + body paragraphs
+function parseRationale(text) {
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
+  let heading = null
+  let bodyLines = lines
+
+  // If the first line is entirely wrapped in ** it's a heading
+  if (/^\*\*.+\*\*$/.test(lines[0])) {
+    heading = lines[0].replace(/^\*\*|\*\*$/g, '')
+    bodyLines = lines.slice(1)
+  }
+
+  return { heading, body: bodyLines.join(' ') }
+}
+
 function AssetCard({ asset, livePrice }) {
   const meta = CATEGORY_META[asset.category] || { emoji: '📈', color: '#7c3aed' }
+  const { heading, body } = asset.rationale ? parseRationale(asset.rationale) : {}
 
   return (
     <div className="asset-card">
@@ -40,7 +64,10 @@ function AssetCard({ asset, livePrice }) {
         </span>
       </div>
       {asset.rationale && (
-        <p className="asset-rationale">{asset.rationale}</p>
+        <div className="asset-rationale">
+          {heading && <p className="asset-rationale-heading">{heading}</p>}
+          {body && <p className="asset-rationale-body">{renderInline(body)}</p>}
+        </div>
       )}
     </div>
   )

@@ -73,6 +73,9 @@ export default function OnboardingForm() {
         const detail = await assessRes.json()
         throw new Error(detail.detail || `Assessment failed: ${assessRes.status}`)
       }
+      const assessData = await assessRes.json()
+      console.log('[OnboardingForm] user:', user)
+      console.log('[OnboardingForm] assess response:', assessData)
 
       navigate(`/dashboard/${user.id}`)
     } catch (err) {
