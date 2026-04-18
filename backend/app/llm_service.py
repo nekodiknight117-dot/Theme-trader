@@ -16,7 +16,7 @@ featherless_key = os.getenv("FEATHERLESS_API_KEY", "")
 if featherless_key and featherless_key != "your_featherless_api_key_here":
     BASE_URL   = "https://api.featherless.ai/v1/chat/completions"
     API_KEY    = featherless_key
-    MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+    MODEL_NAME = "google/gemma-4-31B-it"
 else:
     BASE_URL   = os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1") + "/chat/completions"
     API_KEY    = os.getenv("OPENAI_API_KEY", "lm-studio")
