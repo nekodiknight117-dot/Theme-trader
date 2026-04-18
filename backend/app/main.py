@@ -19,8 +19,11 @@ models.Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from pathlib import Path
     import dotenv
-    dotenv.load_dotenv()
+    # Explicitly load root-level .env regardless of where uvicorn is launched from
+    _root_env = Path(__file__).resolve().parents[2] / ".env"
+    dotenv.load_dotenv(dotenv_path=_root_env, override=True)
     # Start the Alpaca stream in the background
     asyncio.create_task(start_alpaca_stream())
     yield

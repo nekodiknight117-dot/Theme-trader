@@ -1,10 +1,13 @@
 import os
 import json
 import httpx
+from pathlib import Path
 
+# Explicitly load the root-level .env (two levels up: app/ -> backend/ -> project root)
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 try:
     import dotenv
-    dotenv.load_dotenv()
+    dotenv.load_dotenv(dotenv_path=_ROOT_ENV, override=True)
 except ImportError:
     pass
 
