@@ -1,13 +1,14 @@
+import asyncio
 import yfinance as yf
 import pandas as pd
 from typing import List, Dict
 
-# Hardcoded universe as a fallback to LLM selection
+# Hardcoded fallback universe — only used when the LLM call fails
 STOCK_UNIVERSE = {
-    "ETF": ["SPY", "QQQ", "VTI", "VOO", "SCHD", "ARKK", "DIA", "IWM"],
-    "Blue Chip": ["AAPL", "MSFT", "JNJ", "PG", "JPM", "V", "WMT", "KO", "PEP", "MCD"],
-    "IPO": ["HOOD", "COIN", "RBLX", "RDDT", "ARM", "CART", "KVUE"], # Recent-ish IPOs
-    "Rising Star": ["NVDA", "AMD", "SMCI", "PLTR", "CRWD", "SNOW", "TSLA", "META"]
+    "ETF":         ["SPY", "QQQ", "VTI", "VOO", "SCHD", "ARKK", "DIA", "IWM"],
+    "Blue Chip":   ["AAPL", "MSFT", "JNJ", "PG", "JPM", "V", "WMT", "KO", "PEP", "MCD"],
+    "IPO":         ["HOOD", "COIN", "RBLX", "RDDT", "ARM", "CART", "KVUE"],
+    "Rising Star": ["NVDA", "AMD", "SMCI", "PLTR", "CRWD", "SNOW", "TSLA", "META"],
 }
 
 def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
@@ -48,55 +49,73 @@ def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
                 
     return pd.DataFrame(metrics)
 
-def get_algorithmic_portfolio(risk_tolerance: str) -> List[Dict]:
+async def get_algorithmic_portfolio(risk_tolerance: str, interests: str = "") -> List[Dict]:
     """
     Selects stocks algorithmically based on risk tolerance.
-    Low Risk: Heavily favors ETFs and Blue Chips (low volatility).
+    When user interests are provided, first asks the LLM to generate a
+    personalised universe of tickers, then ranks them by return/volatility.
+
+    Low Risk:    Favours ETFs and Blue Chips (low volatility).
     Medium Risk: Balanced mix.
-    High Risk: Heavily favors Rising Stars and IPOs (high return potential, ignores high volatility).
+    High Risk:   Favours Rising Stars and IPOs (high return potential).
     """
+    # --- Step 1: Build the candidate universe ---
+    universe = STOCK_UNIVERSE  # default fallback
+
+    if interests:
+        try:
+            from .llm_service import generate_stock_universe
+            llm_universe = await generate_stock_universe(interests, risk_tolerance)
+            # Validate that we got all four expected keys with non-empty lists
+            if all(llm_universe.get(k) for k in ["ETF", "Blue Chip", "IPO", "Rising Star"]):
+                universe = llm_universe
+                print(f"[stock_selector] Using LLM-generated universe for interests: {interests!r}")
+            else:
+                print("[stock_selector] LLM universe incomplete — falling back to default.")
+        except Exception as e:
+            print(f"[stock_selector] LLM universe generation failed: {e} — using default.")
+
     risk = risk_tolerance.lower()
-    
-    # Define how many of each category to pick based on risk
+
+    # --- Step 2: Define allocation by risk profile ---
     allocation = {
-        "low": {"ETF": 3, "Blue Chip": 2, "IPO": 0, "Rising Star": 0},
+        "low":    {"ETF": 3, "Blue Chip": 2, "IPO": 0, "Rising Star": 0},
         "medium": {"ETF": 1, "Blue Chip": 2, "IPO": 1, "Rising Star": 1},
-        "high": {"ETF": 0, "Blue Chip": 1, "IPO": 2, "Rising Star": 2}
-    }.get(risk, {"ETF": 1, "Blue Chip": 2, "IPO": 1, "Rising Star": 1}) # Default to medium
-    
+        "high":   {"ETF": 0, "Blue Chip": 1, "IPO": 2, "Rising Star": 2},
+    }.get(risk, {"ETF": 1, "Blue Chip": 2, "IPO": 1, "Rising Star": 1})
+
     portfolio = []
-    
+
     for category, count in allocation.items():
         if count == 0:
             continue
-            
-        tickers = STOCK_UNIVERSE[category]
+
+        tickers = universe.get(category, STOCK_UNIVERSE[category])
         metrics_df = fetch_metrics(tickers)
-        
+
         if metrics_df.empty:
             continue
-            
+
         # Sorting logic:
-        # For Low/Medium risk, we prefer lower volatility for ETFs/Blue chips
-        # For High risk, we prefer absolute highest 6m return regardless of volatility
+        # For Low/Medium risk, prefer lower volatility (ETFs/Blue Chips)
+        # For High risk, prefer absolute highest 6-month return
         if risk == "low" or category in ["ETF", "Blue Chip"]:
-            # Sort by volatility ascending (safest first)
             selected = metrics_df.sort_values(by="volatility", ascending=True).head(count)
         else:
-            # Sort by return ascending (highest gainers first)
             selected = metrics_df.sort_values(by="return_6m", ascending=False).head(count)
-            
+
         for _, row in selected.iterrows():
             portfolio.append({
-                "ticker": row['ticker'],
-                "category": category,
-                "projected_cagr": row['return_6m'] * 2, # Rough projection assuming trend continues
-                "volatility": row['volatility']
+                "ticker":         row["ticker"],
+                "category":       category,
+                "projected_cagr": row["return_6m"] * 2,  # rough annualised projection
+                "volatility":     row["volatility"],
             })
-            
+
     return portfolio
+
 
 # Example usage if run directly
 if __name__ == "__main__":
     print("Testing Medium Risk Portfolio:")
-    print(get_algorithmic_portfolio("medium"))
+    print(asyncio.run(get_algorithmic_portfolio("medium", "AI, clean energy")))

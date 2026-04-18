@@ -70,8 +70,8 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    # 1. Select basic portfolio mix algorithmically
-    raw_portfolio = get_algorithmic_portfolio(user.risk_tolerance)
+    # 1. Select portfolio algorithmically, personalised by user interests
+    raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
     
     # Create the portfolio in DB
     portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"
@@ -91,8 +91,9 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
             if research and not research.startswith("Error") and not research.startswith("Could not"):
                 set_cached_value(db, cache_key_tavily, research, ttl_hours=24)
         
-        # 3. Generate LLM Pitch (with Caching)
-        cache_key_llm = f"llm:rationale:{ticker}:{user.risk_tolerance}"
+        # 3. Generate LLM Pitch (with Caching — keyed by ticker + risk + interests)
+        interests_slug = (user.interests or "")[:50]  # cap length for key safety
+        cache_key_llm = f"llm:rationale:{ticker}:{user.risk_tolerance}:{interests_slug}"
         rationale = get_cached_value(db, cache_key_llm)
         if not rationale:
             rationale = await generate_investment_rationale(
