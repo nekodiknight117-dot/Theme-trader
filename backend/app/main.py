@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from . import models, schemas, crud
 from .database import engine, get_db
-from .alpaca_stream import active_connections, start_alpaca_stream
+from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale, parse_user_interests
@@ -25,8 +25,10 @@ async def lifespan(app: FastAPI):
     _root_env = Path(__file__).resolve().parents[2] / ".env"
     dotenv.load_dotenv(dotenv_path=_root_env, override=True)
     # Start the Alpaca stream in the background
-    asyncio.create_task(start_alpaca_stream())
+    await start_alpaca_stream()
     yield
+    # Clean shutdown — cancel the stream task before the event loop closes
+    await stop_alpaca_stream()
 
 app = FastAPI(title="Theme-Trader API", description="Hackathon Backend", lifespan=lifespan)
 
