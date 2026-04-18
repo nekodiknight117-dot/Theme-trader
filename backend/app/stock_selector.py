@@ -11,14 +11,30 @@ STOCK_UNIVERSE = {
     "Rising Star": ["NVDA", "AMD", "SMCI", "PLTR", "CRWD", "SNOW", "TSLA", "META"],
 }
 
+def _flatten_tickers(tickers) -> List[str]:
+    """Ensure tickers is a flat list of strings, handling any nested lists the LLM may return."""
+    flat = []
+    for t in tickers:
+        if isinstance(t, list):
+            flat.extend(str(x).strip().upper() for x in t if x)
+        elif isinstance(t, str) and t.strip():
+            flat.append(t.strip().upper())
+    return flat
+
+
 def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
     """
     Fetches 6-month historical data for a list of tickers and calculates:
     - 6-month return
     - Volatility (Standard deviation of daily returns)
     """
-    # Fetch data as a single batch for speed
-    data = yf.download(tickers, period="6mo", group_by="ticker", auto_adjust=True, threads=True)
+    tickers = _flatten_tickers(tickers)
+    if not tickers:
+        return pd.DataFrame()
+
+    # Pass as space-separated string — yfinance 0.2.x handles lists inconsistently
+    tickers_str = " ".join(tickers) if len(tickers) > 1 else tickers[0]
+    data = yf.download(tickers_str, period="6mo", group_by="ticker", auto_adjust=True, threads=True)
     
     metrics = []
     
