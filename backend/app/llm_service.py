@@ -63,6 +63,10 @@ async def generate_investment_rationale(
         "You are an expert financial advisor for Theme-Trader. Your job is to write a short, engaging, "
         "and personalized investment rationale (1-2 paragraphs) for a specific stock/asset. "
         "Combine the hard financial numbers with the qualitative research provided to pitch this to the user."
+        "Make sure to sufficiently explain what user interest the stock aligns with, and how. "
+        "The user should have a feel for what the company actually does. "
+        "If any of the interests are irrelevant, do not waste time mentioning how it isn't relevant. "
+        "Just speak positively on the part that is"
     )
 
     user_prompt = (
