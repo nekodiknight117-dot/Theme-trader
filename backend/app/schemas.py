@@ -1,5 +1,34 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str = Field(min_length=6)
+    risk_tolerance: str
+    interests: str = ""
+
+
+class UserPublic(BaseModel):
+    id: int
+    username: str
+    risk_tolerance: str
+    interests: str = ""
+
+    class Config:
+        from_attributes = True
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPublic
+
 
 class AssetBase(BaseModel):
     ticker: str
@@ -34,7 +63,9 @@ class UserProfileBase(BaseModel):
     interests: str = ""
 
 class UserProfileCreate(UserProfileBase):
-    pass
+    """Optional password: if set (min 6 chars), user can log in via /auth/login."""
+
+    password: Optional[str] = None
 
 class UserProfile(UserProfileBase):
     id: int

@@ -7,6 +7,7 @@ class UserProfile(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
+    password_hash = Column(String, nullable=True)
     interests = Column(String)  # Comma-separated list for simplicity in hackathon
     risk_tolerance = Column(String)  # "Low", "Medium", "High"
     

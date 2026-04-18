@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Load DATABASE_URL from environment or fallback to local SQLite for development
@@ -13,6 +13,18 @@ engine = create_engine(
     DATABASE_URL, connect_args=connect_args
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def run_sqlite_migrations() -> None:
+    """Add columns to existing SQLite DBs (SQLAlchemy create_all does not alter tables)."""
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+    with engine.connect() as conn:
+        rows = conn.execute(text("PRAGMA table_info(user_profiles)")).fetchall()
+        cols = {r[1] for r in rows}
+        if "password_hash" not in cols:
+            conn.execute(text("ALTER TABLE user_profiles ADD COLUMN password_hash VARCHAR"))
+            conn.commit()
 
 Base = declarative_base()
 

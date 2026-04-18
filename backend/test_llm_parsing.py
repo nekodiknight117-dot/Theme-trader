@@ -5,7 +5,7 @@ All tests mock the LLM client and stock-selector so no external services are nee
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -15,29 +15,19 @@ from sqlalchemy.pool import StaticPool
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _make_fake_llm_response(content: str):
-    """Build a minimal object that mirrors openai.ChatCompletion response structure."""
-    choice = MagicMock()
-    choice.message.content = content
-    resp = MagicMock()
-    resp.choices = [choice]
-    return resp
+def _featherless_json(content: str) -> dict:
+    """Minimal Featherless / OpenAI-compatible chat completion JSON."""
+    return {"choices": [{"message": {"content": content}}]}
 
 
 def _make_async_llm(content: str):
-    """Return a mock client whose .chat.completions.create() yields the fake response."""
-    mock_create = AsyncMock(return_value=_make_fake_llm_response(content))
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = mock_create
-    return mock_client
+    """Mock ``llm_service._post`` returning a successful completion body."""
+    return AsyncMock(return_value=_featherless_json(content))
 
 
 def _make_error_llm(message: str = "LLM offline"):
-    """Return a mock client that always raises an exception."""
-    mock_create = AsyncMock(side_effect=Exception(message))
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = mock_create
-    return mock_client
+    """Mock ``llm_service._post`` raising (simulates network / API failure)."""
+    return AsyncMock(side_effect=Exception(message))
 
 
 # Fake portfolio from stock selector — avoids every yfinance network call
@@ -85,13 +75,18 @@ def _make_test_client(llm_mock, engine, SessionLocal):
 def _seed_user(client, risk_tolerance="high"):
     import time
     username = f"llm_test_{int(time.time() * 1_000_000)}"
-    resp = client.post("/users/", json={
-        "username": username,
-        "risk_tolerance": risk_tolerance,
-        "interests": "AI, tech",
-    })
+    resp = client.post(
+        "/auth/register",
+        json={
+            "username": username,
+            "password": "secret12",
+            "risk_tolerance": risk_tolerance,
+            "interests": "AI, tech",
+        },
+    )
     assert resp.status_code == 200, f"User seed failed: {resp.text}"
-    return resp.json()["id"]
+    data = resp.json()
+    return data["user"]["id"], data["access_token"]
 
 
 # ── Unit tests: llm_service.generate_investment_rationale ────────────────────
@@ -105,13 +100,15 @@ class TestLLMTextParsing:
     def _invoke(self, llm_mock, **kwargs):
         from app.llm_service import generate_investment_rationale
         defaults = dict(
-            ticker="NVDA", category="Rising Star",
+            ticker="NVDA",
+            category="Rising Star",
             quantitative_data={"projected_cagr": 0.45, "volatility": 0.30},
             qualitative_research="NVDA leads in AI GPUs.",
             risk_tolerance="high",
+            interests="AI, GPUs",
         )
         defaults.update(kwargs)
-        with patch("app.llm_service.client", llm_mock):
+        with patch("app.llm_service._post", llm_mock):
             return self._call(generate_investment_rationale(**defaults))
 
     def test_returns_stripped_text(self):
@@ -137,7 +134,7 @@ class TestLLMTextParsing:
         result = self._invoke(_make_error_llm("Connection refused"),
                               ticker="AAPL", category="Blue Chip",
                               risk_tolerance="low")
-        assert result == "System was unable to generate a personalized rationale at this time."
+        assert result == "Rationale generation is temporarily unavailable."
         print(f"[PASS] fallback returned correctly on exception")
 
     def test_empty_string_response_handled(self):
@@ -173,14 +170,17 @@ class TestAssessEndpointLLMParsing:
     def _run_assess(self, llm_mock, risk_tolerance="high"):
         engine, SessionLocal = _fresh_db()
         app, _ = _make_test_client(llm_mock, engine, SessionLocal)
-        with patch("app.llm_service.client", llm_mock), \
+        with patch("app.llm_service._post", llm_mock), \
              patch("app.tavily_research.get_company_research",
                    return_value="Mocked qualitative research."), \
              patch("app.main.get_algorithmic_portfolio",
                    return_value=FAKE_PORTFOLIO), \
              TestClient(app) as client:
-            user_id = _seed_user(client, risk_tolerance)
-            return client.post(f"/api/assess?user_id={user_id}")
+            _user_id, token = _seed_user(client, risk_tolerance)
+            return client.post(
+                "/api/assess",
+                headers={"Authorization": f"Bearer {token}"},
+            )
 
     def test_llm_rationale_appears_in_portfolio_assets(self):
         """Rationale text from the mocked LLM should appear in every asset."""
@@ -217,7 +217,7 @@ class TestAssessEndpointLLMParsing:
 
     def test_fallback_rationale_on_llm_error(self):
         """When LLM errors, the fallback string appears in every API response asset."""
-        FALLBACK = "System was unable to generate a personalized rationale at this time."
+        FALLBACK = "Rationale generation is temporarily unavailable."
 
         resp = self._run_assess(_make_error_llm("LLM offline"))
 
