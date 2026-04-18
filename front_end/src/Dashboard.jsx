@@ -109,7 +109,7 @@ export default function Dashboard() {
   const [wsStatus, setWsStatus] = useState('connecting')
   const wsRef = useRef(null)
 
-  // Fetch portfolio on mount
+  // Fetch portfolio on mount, then seed last close prices
   useEffect(() => {
     async function fetchPortfolio() {
       try {
@@ -117,8 +117,18 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(`Server error: ${res.status}`)
         const portfolios = await res.json()
         if (portfolios.length === 0) throw new Error('No portfolio found for this user.')
-        // Show the most recently created portfolio (last in list)
-        setPortfolio(portfolios[portfolios.length - 1])
+        const latest = portfolios[portfolios.length - 1]
+        setPortfolio(latest)
+
+        // Pre-fill with last close prices so cards always show something
+        const tickers = latest.assets.map((a) => a.ticker).join(',')
+        if (tickers) {
+          const priceRes = await fetch(`${API}/api/last-prices?tickers=${tickers}`)
+          if (priceRes.ok) {
+            const prices = await priceRes.json()
+            setLivePrices(prices)
+          }
+        }
       } catch (err) {
         setError(err.message)
       } finally {

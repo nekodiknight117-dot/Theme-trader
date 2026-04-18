@@ -149,6 +149,36 @@ async def get_algorithmic_portfolio(risk_tolerance: str, interests: str = "") ->
     return portfolio
 
 
+def get_last_close_prices(tickers: List[str]) -> Dict[str, float]:
+    """
+    Returns the most recent closing price for each ticker.
+    Works whether the market is open or closed — always uses the last available day.
+    """
+    tickers = _flatten_tickers(tickers)
+    if not tickers:
+        return {}
+
+    tickers_str = " ".join(tickers) if len(tickers) > 1 else tickers[0]
+    data = yf.download(tickers_str, period="5d", group_by="ticker", auto_adjust=True, progress=False)
+
+    prices = {}
+    if len(tickers) == 1:
+        ticker = tickers[0]
+        close = data["Close"].dropna()
+        if not close.empty:
+            prices[ticker] = round(float(close.iloc[-1]), 2)
+    else:
+        for ticker in tickers:
+            try:
+                close = data[ticker]["Close"].dropna()
+                if not close.empty:
+                    prices[ticker] = round(float(close.iloc[-1]), 2)
+            except Exception:
+                pass
+
+    return prices
+
+
 # Example usage if run directly
 if __name__ == "__main__":
     print("Testing Medium Risk Portfolio:")

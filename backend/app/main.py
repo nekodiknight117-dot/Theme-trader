@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from . import models, schemas, crud
 from .database import engine, get_db
 from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream, update_stream_tickers
-from .stock_selector import get_algorithmic_portfolio
+from .stock_selector import get_algorithmic_portfolio, get_last_close_prices
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale, parse_user_interests
 from .cache_service import get_cached_value, set_cached_value
@@ -150,6 +150,19 @@ def get_portfolios_for_user(user_id: int, db: Session = Depends(get_db)):
 @app.post("/users/{user_id}/portfolios/", response_model=schemas.Portfolio)
 def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):
     return crud.create_portfolio(db=db, user_id=user_id, name=portfolio.name)
+
+# --- Last Close Prices Endpoint ---
+
+@app.get("/api/last-prices")
+def last_prices(tickers: str):
+    """
+    Returns the most recent closing price for a comma-separated list of tickers.
+    Useful when the market is closed and the live stream has no data.
+    Example: /api/last-prices?tickers=AAPL,V,MA
+    """
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    return get_last_close_prices(ticker_list)
+
 
 # --- Realtime WebSocket Endpoint ---
 
