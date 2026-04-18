@@ -49,8 +49,10 @@ async def _run_stream(api_key: str, secret_key: str, tickers: list[str]) -> None
     """
     Connect to Alpaca's market data WebSocket, authenticate, subscribe to
     real-time trades, and broadcast updates to frontend clients.
-    Reconnects automatically on transient errors.
+    Reconnects automatically on transient errors with exponential backoff.
     """
+    backoff = 5  # seconds, doubles on each error up to 60s
+
     while True:
         try:
             async with websockets.connect(_ALPACA_WS_URL, ping_interval=20, ping_timeout=10) as ws:
@@ -61,10 +63,25 @@ async def _run_stream(api_key: str, secret_key: str, tickers: list[str]) -> None
                 auth = {"action": "auth", "key": api_key, "secret": secret_key}
                 await ws.send(json.dumps(auth))
                 auth_resp = json.loads(await ws.recv())
-                if auth_resp[0].get("msg") != "authenticated":
-                    logger.error("[alpaca_stream] Authentication failed: %s", auth_resp)
-                    await asyncio.sleep(10)
+                msg = auth_resp[0] if auth_resp else {}
+
+                if msg.get("msg") != "authenticated":
+                    code = msg.get("code")
+                    if code == 406:
+                        # Connection limit — wait for Alpaca to release the old session
+                        logger.warning(
+                            "[alpaca_stream] Connection limit exceeded (406). "
+                            "Waiting 60s for Alpaca to release the old session..."
+                        )
+                        await asyncio.sleep(60)
+                    else:
+                        logger.error("[alpaca_stream] Authentication failed: %s", auth_resp)
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 60)
                     continue
+
+                # Reset backoff on successful connection
+                backoff = 5
 
                 # Step 3: subscribe to trades
                 sub = {"action": "subscribe", "trades": tickers}
@@ -86,8 +103,9 @@ async def _run_stream(api_key: str, secret_key: str, tickers: list[str]) -> None
             logger.info("[alpaca_stream] Stream cancelled — shutting down cleanly.")
             return
         except Exception as e:
-            logger.warning("[alpaca_stream] Connection error: %s — reconnecting in 5s", e)
-            await asyncio.sleep(5)
+            logger.warning("[alpaca_stream] Connection error: %s — retrying in %ss", e, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
 
 
 async def start_alpaca_stream(tickers: list[str] = DEFAULT_TICKERS) -> None:
