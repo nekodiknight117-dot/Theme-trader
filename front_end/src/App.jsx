@@ -3,6 +3,8 @@ import { Routes, Route, Link } from 'react-router-dom'
 import './App.css'
 import OnboardingForm from './OnboardingForm.jsx'
 import Dashboard from './Dashboard.jsx'
+import Login from './Login.jsx'
+import ProtectedRoute from './ProtectedRoute.jsx'
 
 const THEMES = [
   {
@@ -78,6 +80,9 @@ function Navbar() {
           <li><a href="#themes">Themes</a></li>
           <li><a href="#pricing">Pricing</a></li>
         </ul>
+        <Link to="/login" className="btn-ghost" style={{ marginRight: 12, fontSize: 15 }}>
+          Log in
+        </Link>
         <Link to="/onboarding" className="navbar-cta">Get Started</Link>
       </div>
     </nav>
@@ -300,8 +305,16 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/onboarding" element={<OnboardingForm />} />
-      <Route path="/dashboard/:userId" element={<Dashboard />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   )
 }
