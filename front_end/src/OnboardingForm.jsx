@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from './AuthContext.jsx'
 import './OnboardingForm.css'
 
 const API = 'http://localhost:8000'
@@ -10,9 +11,11 @@ const STEP_GENERATING = 'generating'
 
 export default function OnboardingForm() {
   const navigate = useNavigate()
+  const { loginWithToken } = useAuth()
 
   const [step, setStep] = useState(STEP_TELL_US)
   const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [rawText, setRawText] = useState('')
   const [riskTolerance, setRiskTolerance] = useState('medium')
 
@@ -22,8 +25,12 @@ export default function OnboardingForm() {
 
   async function handleAnalyse(e) {
     e.preventDefault()
-    if (!username.trim() || !rawText.trim()) {
+    if (!username.trim() || !rawText.trim() || !password) {
       setError('Please fill in all fields before continuing.')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
       return
     }
     setError('')
@@ -49,35 +56,35 @@ export default function OnboardingForm() {
     setStep(STEP_GENERATING)
     setError('')
     try {
-      // 1. Create user
-      const userRes = await fetch(`${API}/users/`, {
+      const regRes = await fetch(`${API}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: username.trim(),
+          password,
           risk_tolerance: riskTolerance,
           interests: parsed.interests,
         }),
       })
-      if (!userRes.ok) {
-        const detail = await userRes.json()
-        throw new Error(detail.detail || `User creation failed: ${userRes.status}`)
+      const regData = await regRes.json().catch(() => ({}))
+      if (!regRes.ok) {
+        throw new Error(regData.detail || `Registration failed: ${regRes.status}`)
       }
-      const user = await userRes.json()
+      loginWithToken(regData.access_token, regData.user)
 
-      // 2. Generate portfolio
-      const assessRes = await fetch(`${API}/api/assess?user_id=${user.id}`, {
+      const assessRes = await fetch(`${API}/api/assess`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${regData.access_token}` },
       })
       if (!assessRes.ok) {
-        const detail = await assessRes.json()
+        const detail = await assessRes.json().catch(() => ({}))
         throw new Error(detail.detail || `Assessment failed: ${assessRes.status}`)
       }
       const assessData = await assessRes.json()
       console.log('[OnboardingForm] user:', user)
       console.log('[OnboardingForm] assess response:', assessData)
 
-      navigate(`/dashboard/${user.id}`)
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.message)
       setStep(STEP_REVIEW)
@@ -111,6 +118,22 @@ export default function OnboardingForm() {
                   placeholder="e.g. alex_invests"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  className="form-input"
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={6}
                   required
                 />
               </div>

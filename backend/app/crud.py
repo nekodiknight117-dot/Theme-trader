@@ -7,8 +7,19 @@ def get_user(db: Session, user_id: int):
 def get_user_by_username(db: Session, username: str):
     return db.query(models.UserProfile).filter(models.UserProfile.username == username).first()
 
-def create_user(db: Session, username: str, risk_tolerance: str, interests: str = ""):
-    db_user = models.UserProfile(username=username, risk_tolerance=risk_tolerance, interests=interests)
+def create_user(
+    db: Session,
+    username: str,
+    risk_tolerance: str,
+    interests: str = "",
+    password_hash: str | None = None,
+):
+    db_user = models.UserProfile(
+        username=username,
+        risk_tolerance=risk_tolerance,
+        interests=interests,
+        password_hash=password_hash,
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)

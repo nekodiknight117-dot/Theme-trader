@@ -56,6 +56,7 @@ async def generate_investment_rationale(
     quantitative_data: dict,
     qualitative_research: str,
     risk_tolerance: str,
+    interests: str,
 ) -> str:
     """Synthesizes financial data and qualitative research into a personalized pitch."""
     system_prompt = (
@@ -66,6 +67,7 @@ async def generate_investment_rationale(
 
     user_prompt = (
         f"Asset: {ticker} (Category: {category})\n"
+        f"User's Interests: {interests}\n"
         f"User Risk Tolerance: {risk_tolerance}\n\n"
         f"Quantitative Data (Recent 6-month metrics):\n"
         f"- Projected CAGR / Return: {quantitative_data.get('projected_cagr', 'N/A')}\n"
