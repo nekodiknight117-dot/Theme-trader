@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from . import models
@@ -115,3 +116,27 @@ def add_asset_to_portfolio(
     db.commit()
     db.refresh(db_asset)
     return db_asset
+
+
+def get_landing_example_assets(db: Session) -> list[models.Asset]:
+    """
+    One holding per category (ETF, Blue Chip, Rising Star, IPO) from the portfolio
+    that owns the most recently inserted asset—mirrors what users see on the dashboard.
+    """
+    latest = db.query(models.Asset).order_by(desc(models.Asset.id)).first()
+    if not latest:
+        return []
+
+    assets = (
+        db.query(models.Asset)
+        .filter(models.Asset.portfolio_id == latest.portfolio_id)
+        .order_by(models.Asset.id)
+        .all()
+    )
+    order = ["ETF", "Blue Chip", "Rising Star", "IPO"]
+    by_cat: dict[str, models.Asset] = {}
+    for a in assets:
+        if a.category in order and a.category not in by_cat:
+            by_cat[a.category] = a
+
+    return [by_cat[c] for c in order if c in by_cat]

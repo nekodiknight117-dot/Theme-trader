@@ -47,6 +47,15 @@ class Asset(AssetBase):
     class Config:
         from_attributes = True
 
+
+class LandingExampleAsset(BaseModel):
+    """Public landing-page slice of a holding—matches dashboard fields without portfolio ids."""
+
+    ticker: str
+    name: Optional[str] = None
+    category: str
+    rationale_preview: Optional[str] = None
+
 class PortfolioBase(BaseModel):
     name: str
 
