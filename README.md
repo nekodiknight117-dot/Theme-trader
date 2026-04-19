@@ -56,3 +56,4 @@ npm run dev
 | Package Manager | `uv` (Python), `npm` (Node) |
 
 ![Theme Trader architecture diagram](theme_trader_architecture_diagram.png)
+more at: https://www.canvascloud.ai/view/8ea4ca0e-5e01-40d6-92b9-52bd611f227d
