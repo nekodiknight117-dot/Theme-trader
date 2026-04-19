@@ -81,7 +81,7 @@ export default function OnboardingForm() {
         throw new Error(detail.detail || `Assessment failed: ${assessRes.status}`)
       }
       const assessData = await assessRes.json()
-      console.log('[OnboardingForm] user:', user)
+      console.log('[OnboardingForm] user:', regData.user)
       console.log('[OnboardingForm] assess response:', assessData)
 
       navigate('/dashboard', { replace: true })
