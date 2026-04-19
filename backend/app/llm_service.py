@@ -174,19 +174,67 @@ async def generate_investment_rationale(
     return t or f
 
 
+def _normalize_parsed_interests(parsed: dict, raw_text: str) -> dict:
+    """
+    Merge LLM output into a stable shape for API + DB.
+
+    `interests` is a single string stored on the user profile and fed to stock selection:
+    it must preserve themes, education, career, and hobbies so the pipeline stays informed.
+    """
+    goal = (parsed.get("investment_goals") or parsed.get("investment_goal") or "Growth").strip()
+    if goal not in ("Growth", "Income", "Preservation"):
+        goal = "Growth"
+
+    # New schema (preferred)
+    themes = (parsed.get("investment_themes") or parsed.get("interests") or "").strip()
+    edu = (parsed.get("education") or "").strip()
+    emp = (parsed.get("employment") or "").strip()
+    hob = (parsed.get("hobbies") or "").strip()
+
+    parts = []
+    if themes:
+        parts.append(f"Themes: {themes}")
+    if edu:
+        parts.append(f"Education: {edu}")
+    if emp:
+        parts.append(f"Career: {emp}")
+    if hob:
+        parts.append(f"Hobbies: {hob}")
+    merged = " | ".join(parts) if parts else (raw_text.strip()[:2000] or "General investing")
+
+    return {
+        "interests": merged,
+        "investment_goals": goal,
+        "investment_themes": themes or None,
+        "education": edu or None,
+        "employment": emp or None,
+        "hobbies": hob or None,
+    }
+
+
 async def parse_user_interests(raw_text: str) -> dict:
     """
     Sends the user's free-text description to the LLM and extracts structured
-    investment interests and an inferred goal category.
-    Returns: { "interests": "...", "investment_goals": "..." }
+    investment themes plus education, employment, and hobbies.
+
+    Returns keys used by the frontend:
+      interests (merged string for DB), investment_goals,
+      investment_themes, education, employment, hobbies (may be null).
     """
     system_prompt = (
-        "You are a financial onboarding assistant. Extract structured investment information "
-        "from the user's free-text description. "
-        "Respond with ONLY a valid JSON object — no markdown, no explanation — containing exactly two keys:\n"
-        '  "interests": a concise comma-separated list of investment themes (e.g. "AI, clean energy, healthcare")\n'
-        '  "investment_goals": one of "Growth", "Income", or "Preservation" based on what the user describes.\n'
-        "If the text is vague, make a reasonable inference."
+        "You are a financial onboarding assistant. Read the user's message carefully and extract "
+        "everything relevant — do not ignore education, job, or hobbies.\n"
+        "Map life context to investable angles where sensible (e.g. teacher + psychology → education, "
+        "mental wellness, stable dividend names; gardening/hiking/outdoors → agriculture, renewables, "
+        "consumer outdoor; crocheting → consumer discretionary, small-cap retail if relevant).\n"
+        "Respond with ONLY valid JSON — no markdown, no explanation — with exactly these keys:\n"
+        '  "investment_themes": string, comma-separated investable themes (must reflect their whole story, '
+        "not only one keyword like 'renewable energy' if they said more)\n"
+        '  "education": string, short phrase or "" if none\n'
+        '  "employment": string, short phrase or "" if none\n'
+        '  "hobbies": string, short phrase or "" if none\n'
+        '  "investment_goals": one of "Growth", "Income", or "Preservation"\n'
+        "If a field has no signal, use an empty string. Never drop hobbies or career when the user stated them."
     )
 
     payload = {
@@ -195,8 +243,8 @@ async def parse_user_interests(raw_text: str) -> dict:
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": raw_text},
         ],
-        "temperature": 0.3,
-        "max_tokens": 120,
+        "temperature": 0.25,
+        "max_tokens": 400,
     }
 
     try:
@@ -207,11 +255,13 @@ async def parse_user_interests(raw_text: str) -> dict:
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
-        return json.loads(content)
+        parsed = json.loads(content)
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM did not return a JSON object")
+        return _normalize_parsed_interests(parsed, raw_text)
     except Exception as e:
         print(f"[llm_service] Error parsing user interests: {e}")
-        # Graceful fallback: return the raw text as interests
-        return {"interests": raw_text, "investment_goals": "Growth"}
+        return _normalize_parsed_interests({"investment_themes": raw_text[:500], "education": "", "employment": "", "hobbies": ""}, raw_text)
 
 
 async def generate_stock_universe(interests: str, risk_tolerance: str) -> dict:
