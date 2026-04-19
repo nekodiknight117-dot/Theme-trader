@@ -33,7 +33,6 @@ def run_sqlite_migrations() -> None:
 
         conn.commit()
 
-
 Base = declarative_base()
 
 # Dependency to get the database session

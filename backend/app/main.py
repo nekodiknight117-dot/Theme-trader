@@ -1,4 +1,3 @@
-import asyncio
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,15 +6,17 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 
 from . import models, schemas, crud
-from .database import engine, get_db
+from .database import engine, get_db, run_sqlite_migrations
+from .security import create_access_token, get_current_user, hash_password, verify_password
 from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale, parse_user_interests
 from .cache_service import get_cached_value, set_cached_value
 
-# Create the database tables
+# Create the database tables and apply SQLite migrations
 models.Base.metadata.create_all(bind=engine)
+run_sqlite_migrations()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,6 +45,54 @@ app.add_middleware(
 def read_root():
     return {"status": "ok", "message": "Welcome to the Theme-Trader Backend"}
 
+
+# --- Authentication ---
+
+
+@app.post("/auth/register", response_model=schemas.AuthResponse)
+def auth_register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
+    if crud.get_user_by_username(db, username=body.username):
+        raise HTTPException(status_code=400, detail="Username already registered")
+    ph = hash_password(body.password)
+    user = crud.create_user(
+        db=db,
+        username=body.username,
+        risk_tolerance=body.risk_tolerance,
+        interests=body.interests,
+        password_hash=ph,
+    )
+    token = create_access_token(user_id=user.id, username=user.username)
+    return schemas.AuthResponse(
+        access_token=token,
+        user=schemas.UserPublic.model_validate(user),
+    )
+
+
+@app.post("/auth/login", response_model=schemas.AuthResponse)
+def auth_login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+    user = crud.get_user_by_username(db, username=body.username)
+    if user is None or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    token = create_access_token(user_id=user.id, username=user.username)
+    return schemas.AuthResponse(
+        access_token=token,
+        user=schemas.UserPublic.model_validate(user),
+    )
+
+
+@app.get("/users/me", response_model=schemas.UserPublic)
+def read_me(current: models.UserProfile = Depends(get_current_user)):
+    return schemas.UserPublic.model_validate(current)
+
+
+@app.get("/users/me/portfolios/", response_model=List[schemas.Portfolio])
+def get_my_portfolios(
+    db: Session = Depends(get_db),
+    current: models.UserProfile = Depends(get_current_user),
+):
+    return crud.get_portfolios_for_user(db, user_id=current.id)
+
+
 # --- Interest Parsing Endpoint ---
 
 class ParseInterestsRequest(BaseModel):
@@ -61,14 +110,14 @@ async def parse_interests(body: ParseInterestsRequest):
 # --- Assessment & Research Pipeline Endpoint ---
 
 @app.post("/api/assess", response_model=schemas.Portfolio)
-async def run_assessment(user_id: int, db: Session = Depends(get_db)):
+async def run_assessment(
+    db: Session = Depends(get_db),
+    current: models.UserProfile = Depends(get_current_user),
+):
     """
-    Core pipeline: Takes a user, uses algorithmic stock selection based on their risk tolerance,
-    pulls qualitative research from Tavily, synthesizes it via LLM, and creates a portfolio.
+    Core pipeline: Authenticated user; algorithmic selection, Tavily research, LLM rationale, new portfolio.
     """
-    user = crud.get_user(db, user_id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = current
         
     # 1. Select portfolio algorithmically, personalised by user interests
     raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
@@ -107,9 +156,10 @@ async def run_assessment(user_id: int, db: Session = Depends(get_db)):
                 category=category, 
                 quantitative_data=asset_data, 
                 qualitative_research=research, 
-                risk_tolerance=user.risk_tolerance
+                risk_tolerance=user.risk_tolerance,
+                interests=user.interests or "",
             )
-            if rationale and not rationale.startswith("System was unable"):
+            if rationale and "temporarily unavailable" not in rationale.lower():
                 set_cached_value(db, cache_key_llm, rationale, ttl_hours=24)
         
         # 4. Save to Database
@@ -134,7 +184,18 @@ def create_user(user: schemas.UserProfileCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    return crud.create_user(db=db, username=user.username, risk_tolerance=user.risk_tolerance, interests=user.interests)
+    ph = None
+    if user.password:
+        if len(user.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        ph = hash_password(user.password)
+    return crud.create_user(
+        db=db,
+        username=user.username,
+        risk_tolerance=user.risk_tolerance,
+        interests=user.interests,
+        password_hash=ph,
+    )
 
 @app.get("/users/{user_id}", response_model=schemas.UserProfile)
 def read_user(user_id: int, db: Session = Depends(get_db)):

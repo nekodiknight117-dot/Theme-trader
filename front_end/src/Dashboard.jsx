@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from './AuthContext.jsx'
 import './Dashboard.css'
 import FundViz from './FundViz.jsx'
 
@@ -70,41 +71,40 @@ function CategorySection({ category, assets, livePrices }) {
 }
 
 export default function Dashboard() {
-  const { userId } = useParams()
+  const navigate = useNavigate()
+  const { token, user, authHeader, logout } = useAuth()
   const [portfolio, setPortfolio] = useState(null)
-  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [livePrices, setLivePrices] = useState({})
   const [wsStatus, setWsStatus] = useState('connecting')
-  const wsRef = useRef(null)
 
-  // Fetch portfolio and user on mount
+  // Fetch portfolio on mount (JWT required)
   useEffect(() => {
-    async function fetchData() {
+    async function fetchPortfolio() {
       try {
-        const [portfoliosRes, userRes] = await Promise.all([
-          fetch(`${API}/users/${userId}/portfolios/`),
-          fetch(`${API}/users/${userId}`),
-        ])
-        if (!portfoliosRes.ok) throw new Error(`Server error: ${portfoliosRes.status}`)
-        const portfolios = await portfoliosRes.json()
-        if (portfolios.length === 0) throw new Error('No portfolio found for this user.')
+        const res = await fetch(`${API}/users/me/portfolios/`, { headers: { ...authHeader } })
+        if (res.status === 401) {
+          logout()
+          navigate('/login', { replace: true })
+          return
+        }
+        if (!res.ok) throw new Error(`Server error: ${res.status}`)
+        const portfolios = await res.json()
+        if (portfolios.length === 0) throw new Error('No portfolio found. Complete onboarding first.')
         setPortfolio(portfolios[portfolios.length - 1])
-        if (userRes.ok) setUser(await userRes.json())
       } catch (err) {
         setError(err.message)
       } finally {
         setLoading(false)
       }
     }
-    fetchData()
-  }, [userId])
+    if (token) fetchPortfolio()
+  }, [token, authHeader, logout, navigate])
 
   // WebSocket for live prices
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
-    wsRef.current = ws
 
     ws.onopen = () => setWsStatus('connected')
     ws.onclose = () => setWsStatus('disconnected')
@@ -127,7 +127,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="dashboard-page">
-        <DashboardNav />
+        <DashboardNav onLogout={logout} />
         <div className="dashboard-loading">
           <div className="spinner" />
           <p>Loading your portfolio…</p>
@@ -139,7 +139,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="dashboard-page">
-        <DashboardNav />
+        <DashboardNav onLogout={logout} />
         <div className="dashboard-error">
           <h2>Something went wrong</h2>
           <p>{error}</p>
@@ -159,7 +159,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-page">
-      <DashboardNav />
+      <DashboardNav onLogout={logout} />
 
       <div className="dashboard-inner">
         <div className="dashboard-hero">
@@ -196,7 +196,7 @@ export default function Dashboard() {
   )
 }
 
-function DashboardNav() {
+function DashboardNav({ onLogout }) {
   return (
     <nav className="dashboard-nav">
       <Link to="/" className="navbar-logo" style={{ textDecoration: 'none' }}>
@@ -204,6 +204,9 @@ function DashboardNav() {
       </Link>
       <div className="dashboard-nav-right">
         <Link to="/onboarding" className="btn-ghost-sm">New Fund</Link>
+        <button type="button" className="btn-ghost-sm" onClick={onLogout}>
+          Log out
+        </button>
       </div>
     </nav>
   )
