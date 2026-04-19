@@ -34,6 +34,48 @@ def fetch_company_names(tickers: List[str]) -> Dict[str, str]:
     return names
 
 
+def fetch_betas(tickers: List[str]) -> Dict[str, float]:
+    """
+    Returns a dict of {ticker: beta} using yfinance .info.
+    Falls back to 1.0 (market-neutral) for any ticker missing beta data or with non-positive beta.
+    """
+    betas = {}
+    for ticker in tickers:
+        try:
+            raw = yf.Ticker(ticker).info.get("beta")
+            b = float(raw) if raw is not None else None
+            # Clamp: negative / zero beta breaks inverse weighting; treat as market-neutral
+            betas[ticker] = max(b, 0.1) if b is not None else 1.0
+        except Exception:
+            betas[ticker] = 1.0
+    return betas
+
+
+def compute_beta_weights(betas: Dict[str, float], risk: str) -> Dict[str, float]:
+    """
+    Converts per-ticker beta values into portfolio weights that align with risk tolerance.
+
+    Low    risk → inverse-beta  (1/β)      — safer, low-volatility assets get more weight
+    Medium risk → inverse sqrt  (1/√β)     — softer tilt toward stability
+    High   risk → pro-beta      (β)        — higher-beta assets get more weight to maximise return potential
+
+    All weights are normalised to sum to 1.0.
+    """
+    tickers = list(betas.keys())
+    if not tickers:
+        return {}
+
+    if risk == "low":
+        raw = {t: 1.0 / betas[t] for t in tickers}
+    elif risk == "high":
+        raw = {t: betas[t] for t in tickers}
+    else:  # medium — square-root inverse
+        raw = {t: 1.0 / (betas[t] ** 0.5) for t in tickers}
+
+    total = sum(raw.values())
+    return {t: raw[t] / total for t in tickers}
+
+
 def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
     """
     Fetches 6-month historical data for a list of tickers and calculates:
@@ -140,11 +182,19 @@ async def get_algorithmic_portfolio(risk_tolerance: str, interests: str = "") ->
                 "volatility":     row["volatility"],
             })
 
-    # Attach human-readable company names
+    # Attach human-readable company names and beta values
     all_tickers = [a["ticker"] for a in portfolio]
     names = fetch_company_names(all_tickers)
+    betas = fetch_betas(all_tickers)
+
     for asset in portfolio:
         asset["company_name"] = names.get(asset["ticker"], asset["ticker"])
+        asset["beta"] = betas.get(asset["ticker"], 1.0)
+
+    # Compute beta-based portfolio weights aligned with the user's risk tolerance
+    weights = compute_beta_weights(betas, risk)
+    for asset in portfolio:
+        asset["weight"] = round(weights.get(asset["ticker"], 1.0 / len(portfolio)), 4)
 
     return portfolio
 

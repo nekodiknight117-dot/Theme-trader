@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Column, Float, Integer, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -34,6 +34,8 @@ class Asset(Base):
     rationale = Column(String)  # Legacy combined copy for older clients
     theme_rationale = Column(String, nullable=True)
     financial_rationale = Column(String, nullable=True)
+    beta = Column(Float, nullable=True)    # Market beta from yfinance
+    weight = Column(Float, nullable=True)  # Beta-derived portfolio weight (sums to 1.0)
 
     portfolio = relationship("Portfolio", back_populates="assets")
 

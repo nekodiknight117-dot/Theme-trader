@@ -130,33 +130,54 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
     return ((cur - pc) / pc) * 100
   }
 
-  const returns = assets.map((a) => assetReturn(a.ticker)).filter((r) => r != null)
-  const fundReturn = returns.length > 0 ? returns.reduce((s, r) => s + r, 0) / returns.length : null
+  /**
+   * Per-asset beta weights supplied by the backend (sum to 1.0).
+   * Fall back to equal weight if an asset has no weight field.
+   */
+  const assetWeights = useMemo(() => {
+    const hasBetaWeight = assets.every((a) => typeof a.weight === 'number')
+    if (hasBetaWeight) {
+      // Re-normalise in case of floating-point drift
+      const total = assets.reduce((s, a) => s + a.weight, 0)
+      return Object.fromEntries(assets.map((a) => [a.ticker, total > 0 ? a.weight / total : 1 / n]))
+    }
+    return Object.fromEntries(assets.map((a) => [a.ticker, 1 / n]))
+  }, [assets, n])
 
-  const expReturns = assets
-    .map((a) => expectedReturn[a.ticker])
-    .map((r) => Number(r))
-    .filter((r) => Number.isFinite(r))
-  const fundExpectedReturn =
-    expReturns.length > 0 ? expReturns.reduce((s, r) => s + r, 0) / expReturns.length : null
+  const isBetaWeighted = assets.every((a) => typeof a.weight === 'number')
 
-  const perfPcts = assets
-    .map((a) => periodPerf[a.ticker]?.pct)
-    .map((x) => Number(x))
-    .filter((x) => Number.isFinite(x))
-  const fundPeriodPct =
-    perfPcts.length > 0 ? perfPcts.reduce((s, x) => s + x, 0) / perfPcts.length : null
+  // Weighted today's return
+  const _retPairs = assets.map((a) => ({ w: assetWeights[a.ticker], r: assetReturn(a.ticker) })).filter(({ r }) => r != null)
+  const _retWSum = _retPairs.reduce((s, { w }) => s + w, 0)
+  const fundReturn = _retPairs.length > 0 && _retWSum > 0
+    ? _retPairs.reduce((s, { w, r }) => s + (w / _retWSum) * r, 0)
+    : null
 
-  /** Equal-weight portfolio P/L on a $10,000 notional (arithmetic average of asset % returns). */
+  // Weighted expected return
+  const _expPairs = assets.map((a) => ({ w: assetWeights[a.ticker], r: Number(expectedReturn[a.ticker]) })).filter(({ r }) => Number.isFinite(r))
+  const _expWSum = _expPairs.reduce((s, { w }) => s + w, 0)
+  const fundExpectedReturn = _expPairs.length > 0 && _expWSum > 0
+    ? _expPairs.reduce((s, { w, r }) => s + (w / _expWSum) * r, 0)
+    : null
+
+  // Weighted period return
+  const _pPairs = assets.map((a) => ({ w: assetWeights[a.ticker], x: Number(periodPerf[a.ticker]?.pct) })).filter(({ x }) => Number.isFinite(x))
+  const _pWSum = _pPairs.reduce((s, { w }) => s + w, 0)
+  const fundPeriodPct = _pPairs.length > 0 && _pWSum > 0
+    ? _pPairs.reduce((s, { w, x }) => s + (w / _pWSum) * x, 0)
+    : null
+
+  /** Beta-weighted portfolio P/L on a $10,000 notional. */
   const notionalTotal = 10000
   const fundPeriodDollar =
     fundPeriodPct != null ? (notionalTotal * fundPeriodPct) / 100 : null
 
-  const catCounts = {}
+  // Category weights = sum of individual asset weights per category
+  const catWeights = {}
   for (const a of assets) {
-    catCounts[a.category] = (catCounts[a.category] || 0) + 1
+    catWeights[a.category] = (catWeights[a.category] || 0) + (assetWeights[a.ticker] || 0)
   }
-  const catOrder = Object.keys(catCounts).sort((a, b) => catCounts[b] - catCounts[a])
+  const catOrder = Object.keys(catWeights).sort((a, b) => catWeights[b] - catWeights[a])
 
   const periodLabel = PERFORMANCE_PERIODS.find((p) => p.id === period)?.label ?? period.toUpperCase()
 
@@ -199,7 +220,7 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
         </div>
         <div className="fund-kpi">
           <span className="fund-kpi-label">Weighting</span>
-          <span className="fund-kpi-value">Equal ({(100 / n).toFixed(1)}% each)</span>
+          <span className="fund-kpi-value">{isBetaWeighted ? 'Beta-weighted' : `Equal (${(100 / n).toFixed(1)}% each)`}</span>
         </div>
       </div>
 
@@ -226,7 +247,7 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
         <span className="alloc-label">Allocation by Category</span>
         <div className="alloc-bar">
           {catOrder.map((cat) => {
-            const weight = (catCounts[cat] / n) * 100
+            const weight = (catWeights[cat] || 0) * 100
             const meta = CATEGORY_META[cat] || { color: '#7c3aed' }
             return (
               <div
@@ -240,7 +261,7 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
         </div>
         <div className="alloc-legend">
           {catOrder.map((cat) => {
-            const weight = (catCounts[cat] / n) * 100
+            const weight = (catWeights[cat] || 0) * 100
             const meta = CATEGORY_META[cat] || { emoji: '📈', color: '#7c3aed' }
             return (
               <div key={cat} className="alloc-legend-item">
@@ -272,6 +293,7 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
             <span>Mkt cap</span>
             <span>Div %</span>
             <span>Beta</span>
+            <span>Weight</span>
             <span>52w range</span>
           </div>
           {assets.map((a) => {
@@ -308,7 +330,10 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
                     : '—'}
                 </span>
                 <span className="asset-metric">
-                  {Number.isFinite(Number(f.beta)) ? Number(f.beta).toFixed(2) : '—'}
+                  {Number.isFinite(Number(f.beta)) ? Number(f.beta).toFixed(2) : (Number.isFinite(a.beta) ? Number(a.beta).toFixed(2) : '—')}
+                </span>
+                <span className="asset-metric">
+                  {Number.isFinite(assetWeights[a.ticker]) ? `${(assetWeights[a.ticker] * 100).toFixed(1)}%` : '—'}
                 </span>
                 <span className="asset-metric asset-metric--tight">{range52}</span>
               </div>

@@ -101,6 +101,8 @@ def add_asset_to_portfolio(
     name: str = "",
     theme_rationale: str | None = None,
     financial_rationale: str | None = None,
+    beta: float | None = None,
+    weight: float | None = None,
 ):
     combined = rationale if rationale else _combined_rationale(theme_rationale, financial_rationale)
     db_asset = models.Asset(
@@ -111,6 +113,8 @@ def add_asset_to_portfolio(
         rationale=combined,
         theme_rationale=theme_rationale,
         financial_rationale=financial_rationale,
+        beta=beta,
+        weight=weight,
     )
     db.add(db_asset)
     db.commit()

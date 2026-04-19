@@ -34,6 +34,12 @@ def run_sqlite_migrations() -> None:
         if "financial_rationale" not in cols:
             conn.execute(text("ALTER TABLE assets ADD COLUMN financial_rationale VARCHAR"))
             conn.commit()
+        if "beta" not in cols:
+            conn.execute(text("ALTER TABLE assets ADD COLUMN beta REAL"))
+            conn.commit()
+        if "weight" not in cols:
+            conn.execute(text("ALTER TABLE assets ADD COLUMN weight REAL"))
+            conn.commit()
 
 Base = declarative_base()
 

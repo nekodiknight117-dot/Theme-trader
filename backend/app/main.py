@@ -244,6 +244,8 @@ async def run_assessment(
             name=company_name,
             theme_rationale=theme_text,
             financial_rationale=financial_text,
+            beta=asset_data.get("beta"),
+            weight=asset_data.get("weight"),
         )
         
     # Return the newly hydrated portfolio
