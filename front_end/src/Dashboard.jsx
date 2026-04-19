@@ -4,18 +4,10 @@ import { useAuth } from './AuthContext.jsx'
 import PriceChart from './PriceChart.jsx'
 import FundSummary from './FundSummary.jsx'
 import './Dashboard.css'
+import { CATEGORY_ORDER, CATEGORY_META } from './categoryMeta.js'
 
 const API = 'http://localhost:8000'
 const WS_URL = 'ws://localhost:8000/ws/prices'
-
-const CATEGORY_ORDER = ['ETF', 'Blue Chip', 'Rising Star', 'IPO']
-
-const CATEGORY_META = {
-  'ETF': { emoji: '📊', color: '#3b82f6' },
-  'Blue Chip': { emoji: '💎', color: '#10b981' },
-  'Rising Star': { emoji: '🚀', color: '#f59e0b' },
-  'IPO': { emoji: '✨', color: '#ec4899' },
-}
 
 function groupByCategory(assets) {
   const groups = {}

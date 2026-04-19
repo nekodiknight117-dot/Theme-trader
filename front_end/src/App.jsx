@@ -1,70 +1,66 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import './App.css'
 import OnboardingForm from './OnboardingForm.jsx'
 import Dashboard from './Dashboard.jsx'
 import Login from './Login.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import { CATEGORY_META } from './categoryMeta.js'
 
-const THEMES = [
+const API = 'http://localhost:8000'
+
+/** Shown when the DB has no assets yet or the API fails—matches dashboard category buckets. */
+const FALLBACK_LANDING_EXAMPLES = [
   {
-    icon: '🌱',
-    name: 'Clean Energy',
-    desc: 'Solar, wind, and battery tech companies driving the energy transition.',
-    tag: 'ESG',
+    ticker: 'SPY',
+    name: 'SPDR S&P 500 ETF Trust',
+    category: 'ETF',
+    rationale_preview:
+      'ETF slots lean toward broad market exposure—your risk level controls how many you get.',
   },
   {
-    icon: '🤖',
-    name: 'AI & Tech',
-    desc: 'The companies building the next generation of artificial intelligence.',
-    tag: 'Growth',
+    ticker: 'AAPL',
+    name: 'Apple Inc.',
+    category: 'Blue Chip',
+    rationale_preview:
+      'Blue chips emphasize established names; after signup you will see AI rationales tied to your profile.',
   },
   {
-    icon: '🏥',
-    name: 'Healthcare',
-    desc: 'Biotech, medical devices, and digital health innovators.',
-    tag: 'Defensive',
+    ticker: 'NVDA',
+    name: 'NVIDIA Corporation',
+    category: 'Rising Star',
+    rationale_preview:
+      'Growth-oriented names rank on recent performance—higher risk profiles include more of this bucket.',
   },
   {
-    icon: '🚀',
-    name: 'Space',
-    desc: 'Satellites, launch vehicles, and space-infrastructure pioneers.',
-    tag: 'Emerging',
-  },
-  {
-    icon: '🎮',
-    name: 'Gaming',
-    desc: 'Video games, esports, and interactive entertainment leaders.',
-    tag: 'Consumer',
-  },
-  {
-    icon: '🏙️',
-    name: 'Real Estate',
-    desc: 'REITs and proptech transforming how people live and work.',
-    tag: 'Income',
+    ticker: 'COIN',
+    name: 'Coinbase Global Inc.',
+    category: 'IPO',
+    rationale_preview:
+      'Newer listings can surface in the IPO category when risk tolerance allows.',
   },
 ]
 
 const STEPS = [
   {
     n: '1',
-    title: 'Pick Your Interests',
-    desc: 'Tell us what sectors and topics matter to you.',
+    title: 'Describe your interests',
+    desc: 'Write a short paragraph about what you care about and your goals—we parse themes from your own words.',
   },
   {
     n: '2',
-    title: 'Share Your Goals',
-    desc: 'Set your risk tolerance, timeline, and return targets.',
+    title: 'Choose risk tolerance',
+    desc: 'Pick low, medium, or high. It sets the mix across ETFs, blue chips, IPOs, and growth-oriented names.',
   },
   {
     n: '3',
-    title: 'We Build the Fund',
-    desc: 'Our engine assembles a diversified portfolio around your themes.',
+    title: 'We build a ranked portfolio',
+    desc: 'We score candidates on recent market data and, when possible, use theme-aware ticker lists—then add research-informed AI rationales.',
   },
   {
     n: '4',
-    title: 'You Invest',
-    desc: 'Review, approve, and start growing with a fund made for you.',
+    title: 'Review on your dashboard',
+    desc: 'See holdings, charts, live prices, and rationale copy. ThemeTrader does not place trades for you in the app.',
   },
 ]
 
@@ -77,8 +73,7 @@ function Navbar() {
         </Link>
         <ul className="navbar-links">
           <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#themes">Themes</a></li>
-          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#examples">Examples</a></li>
         </ul>
         <Link to="/login" className="btn-ghost" style={{ marginRight: 12, fontSize: 15 }}>
           Log in
@@ -95,23 +90,24 @@ function Hero() {
       <div className="hero-blob" aria-hidden="true" />
       <div className="hero-inner">
         <div className="hero-badge">
-          ✦ Personalized investing, finally
+          ✦ Theme-aligned portfolio ideas
         </div>
         <h1>
           Invest in what<br />
           <em>you believe in</em>
         </h1>
         <p className="hero-sub">
-          ThemeTrader builds you a custom fund around your interests —
-          clean energy, AI, healthcare, or anything that excites you.
-          No jargon. No cookie-cutter portfolios.
+          Describe your interests in your own words, set a risk level, and get a
+          sample portfolio of stocks and ETFs—ranked on recent market data, with
+          short AI-written rationales grounded in public research. Explore results
+          on your dashboard; this isn&apos;t brokerage or trade execution.
         </p>
         <div className="hero-actions">
           <Link to="/onboarding" className="btn-primary">
-            Build My Fund →
+            Build my portfolio →
           </Link>
-          <a href="#themes" className="btn-ghost">
-            See Themes
+          <a href="#examples" className="btn-ghost">
+            See examples
           </a>
         </div>
       </div>
@@ -124,10 +120,10 @@ function HowItWorks() {
     <section className="section how-it-works" id="how-it-works">
       <div className="section-inner">
         <span className="section-tag">How It Works</span>
-        <h2 className="section-heading">From interests to investments in minutes</h2>
+        <h2 className="section-heading">From interests to a ranked portfolio</h2>
         <p className="section-sub">
-          Four simple steps turn your passions into a portfolio that's
-          uniquely yours.
+          Signup is one paragraph plus risk—then we run the selection and rationale
+          pipeline below.
         </p>
         <div className="steps-grid">
           {STEPS.map((step) => (
@@ -143,91 +139,102 @@ function HowItWorks() {
   )
 }
 
-function ThemeCards() {
-  return (
-    <section className="section" id="themes">
-      <div className="section-inner">
-        <span className="section-tag">Themes</span>
-        <h2 className="section-heading">Explore investment themes</h2>
-        <p className="section-sub">
-          Choose one or mix and match — we handle the diversification.
-        </p>
-        <div className="themes-grid">
-          {THEMES.map((t) => (
-            <div className="theme-card" key={t.name}>
-              <span className="theme-icon">{t.icon}</span>
-              <h3>{t.name}</h3>
-              <p>{t.desc}</p>
-              <span className="theme-pill">{t.tag}</span>
-            </div>
+function LandingExamplesSection() {
+  const [examples, setExamples] = useState(null)
+  const [fromDatabase, setFromDatabase] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch(`${API}/api/landing-examples`)
+        if (!res.ok) throw new Error(String(res.status))
+        const data = await res.json()
+        if (cancelled) return
+        if (Array.isArray(data) && data.length > 0) {
+          setExamples(data)
+          setFromDatabase(true)
+        } else {
+          setExamples(FALLBACK_LANDING_EXAMPLES)
+          setFromDatabase(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setExamples(FALLBACK_LANDING_EXAMPLES)
+          setFromDatabase(false)
+        }
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const header = (
+    <>
+      <span className="section-tag">Dashboard preview</span>
+      <h2 className="section-heading">Holdings use these four categories</h2>
+      <p className="section-sub">
+        Each row matches what you&apos;ll see after signup: ticker, company name, category badge,
+        and rationale text. Samples come from the latest portfolio stored in the database when
+        available; otherwise we show the same structure with representative tickers.
+        {examples !== null &&
+          (fromDatabase ? (
+            <span className="examples-source-note"> Live examples from the most recent assessment.</span>
+          ) : (
+            <span className="examples-source-note"> Placeholders until your first portfolio is generated.</span>
           ))}
-        </div>
-      </div>
-    </section>
+      </p>
+    </>
   )
-}
 
-function Stats() {
-  return (
-    <section className="stats">
-      <div className="stats-inner">
-        <div className="stat-item">
-          <div className="stat-number">50+</div>
-          <div className="stat-label">Investment themes</div>
+  if (examples === null) {
+    return (
+      <section className="section" id="examples">
+        <div className="section-inner">
+          {header}
+          <p className="examples-loading" role="status">
+            Loading sample holdings…
+          </p>
         </div>
-        <div className="stat-item">
-          <div className="stat-number">12k+</div>
-          <div className="stat-label">Investors on platform</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-number">$0</div>
-          <div className="stat-label">Commission fees</div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function CtaBanner() {
-  const [email, setEmail] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    if (email.trim()) setSubmitted(true)
+      </section>
+    )
   }
 
   return (
-    <section className="cta-banner" id="get-started">
+    <section className="section" id="examples">
       <div className="section-inner">
-        <span className="section-tag">Get Started</span>
-        <h2 className="section-heading">Ready to build your fund?</h2>
-        <p className="section-sub">
-          Join thousands of investors who grow their wealth around what they
-          care about. It's free to start.
-        </p>
-        {submitted ? (
-          <p style={{ marginTop: 36, fontWeight: 600, color: 'var(--accent)', fontSize: 17 }}>
-            ✓ We'll be in touch soon!
-          </p>
-        ) : (
-          <form className="cta-form" onSubmit={handleSubmit}>
-            <input
-              className="cta-input"
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <button type="submit" className="btn-primary">
-              Join Free
-            </button>
-          </form>
-        )}
-        <Link to="/onboarding" className="btn-primary" style={{ marginTop: 16, display: 'inline-block' }}>
-          Build My Fund Now →
-        </Link>
+        {header}
+        <div className="examples-grid">
+          {examples.map((asset) => {
+            const meta = CATEGORY_META[asset.category] || { emoji: '📈', color: '#7c3aed' }
+            return (
+              <article className="example-holding-card" key={`${asset.ticker}-${asset.category}`}>
+                <div className="example-holding-header">
+                  <div className="example-holding-titles">
+                    <span className="example-holding-ticker">{asset.ticker}</span>
+                    {asset.name && asset.name !== asset.ticker && (
+                      <span className="example-holding-name">{asset.name}</span>
+                    )}
+                  </div>
+                  <span
+                    className="example-holding-badge"
+                    style={{
+                      background: `${meta.color}22`,
+                      color: meta.color,
+                    }}
+                  >
+                    {meta.emoji} {asset.category}
+                  </span>
+                </div>
+                {asset.rationale_preview && (
+                  <p className="example-holding-rationale">{asset.rationale_preview}</p>
+                )}
+              </article>
+            )
+          })}
+        </div>
       </div>
     </section>
   )
@@ -235,7 +242,7 @@ function CtaBanner() {
 
 function Footer() {
   return (
-    <footer className="footer" id="pricing">
+    <footer className="footer">
       <div className="footer-inner">
         <div className="footer-top">
           <div className="footer-brand">
@@ -243,44 +250,21 @@ function Footer() {
               Theme<span>Trader</span>
             </span>
             <p>
-              Personalized funds built around your interests.
-              Smarter investing starts here.
+              Theme-aligned portfolio ideas from your interests—not a fund product.
+              For exploration and learning; not a substitute for your own research.
             </p>
           </div>
           <div className="footer-col">
             <h4>Product</h4>
             <ul>
               <li><a href="#how-it-works">How It Works</a></li>
-              <li><a href="#themes">Themes</a></li>
-              <li><a href="#pricing">Pricing</a></li>
-              <li><a href="#get-started">Get Started</a></li>
-            </ul>
-          </div>
-          <div className="footer-col">
-            <h4>Company</h4>
-            <ul>
-              <li><a href="#">About Us</a></li>
-              <li><a href="#">Blog</a></li>
-              <li><a href="#">Careers</a></li>
-              <li><a href="#">Press</a></li>
-            </ul>
-          </div>
-          <div className="footer-col">
-            <h4>Legal</h4>
-            <ul>
-              <li><a href="#">Terms of Service</a></li>
-              <li><a href="#">Privacy Policy</a></li>
-              <li><a href="#">Disclosures</a></li>
+              <li><a href="#examples">Examples</a></li>
+              <li><Link to="/onboarding">Get Started</Link></li>
             </ul>
           </div>
         </div>
         <div className="footer-bottom">
           <p>© 2026 ThemeTrader. All rights reserved. Not financial advice.</p>
-          <div className="footer-bottom-links">
-            <a href="#">Twitter / X</a>
-            <a href="#">LinkedIn</a>
-            <a href="#">Discord</a>
-          </div>
         </div>
       </div>
     </footer>
@@ -293,9 +277,7 @@ function LandingPage() {
       <Navbar />
       <Hero />
       <HowItWorks />
-      <ThemeCards />
-      <Stats />
-      <CtaBanner />
+      <LandingExamplesSection />
       <Footer />
     </div>
   )

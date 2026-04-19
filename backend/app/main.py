@@ -116,6 +116,36 @@ def get_my_portfolios(
 class ParseInterestsRequest(BaseModel):
     raw_text: str
 
+def _rationale_preview(text: str | None, max_len: int = 220) -> str | None:
+    if not text or not str(text).strip():
+        return None
+    t = str(text).strip()
+    if len(t) <= max_len:
+        return t
+    cut = t[: max_len - 1]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut + "…"
+
+
+@app.get("/api/landing-examples", response_model=List[schemas.LandingExampleAsset])
+def landing_examples(db: Session = Depends(get_db)):
+    """
+    Sample holdings from the most recently generated portfolio in the database—same
+    shape as dashboard rows (ticker, name, category, rationale excerpt). Empty if no assets yet.
+    """
+    rows = crud.get_landing_example_assets(db)
+    return [
+        schemas.LandingExampleAsset(
+            ticker=a.ticker,
+            name=a.name or None,
+            category=a.category,
+            rationale_preview=_rationale_preview(a.rationale),
+        )
+        for a in rows
+    ]
+
+
 @app.post("/api/parse-interests")
 async def parse_interests(body: ParseInterestsRequest):
     """
