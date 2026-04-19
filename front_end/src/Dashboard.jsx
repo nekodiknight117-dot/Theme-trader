@@ -24,14 +24,43 @@ function groupByCategory(assets) {
   return groups
 }
 
+// Renders a string with **bold** markers into React elements
+function renderInline(text) {
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  )
+}
+
+// Splits rationale into an optional heading line + body paragraphs
+function parseRationale(text) {
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
+  let heading = null
+  let bodyLines = lines
+
+  // If the first line is entirely wrapped in ** it's a heading
+  if (/^\*\*.+\*\*$/.test(lines[0])) {
+    heading = lines[0].replace(/^\*\*|\*\*$/g, '')
+    bodyLines = lines.slice(1)
+  }
+
+  return { heading, body: bodyLines.join(' ') }
+}
+
 function AssetCard({ asset, livePrice }) {
   const meta = CATEGORY_META[asset.category] || { emoji: '📈', color: '#7c3aed' }
+  const { heading, body } = asset.rationale ? parseRationale(asset.rationale) : {}
 
   return (
     <div className="asset-card">
       <div className="asset-card-header">
         <div className="asset-ticker-row">
-          <span className="asset-ticker">{asset.ticker}</span>
+          <div className="asset-ticker-group">
+            <span className="asset-ticker">{asset.ticker}</span>
+            {asset.name && asset.name !== asset.ticker && (
+              <span className="asset-company-name">{asset.name}</span>
+            )}
+          </div>
           {livePrice != null && (
             <span className="asset-live-price">${livePrice.toFixed(2)}</span>
           )}
@@ -41,7 +70,10 @@ function AssetCard({ asset, livePrice }) {
         </span>
       </div>
       {asset.rationale && (
-        <p className="asset-rationale">{asset.rationale}</p>
+        <div className="asset-rationale">
+          {heading && <p className="asset-rationale-heading">{heading}</p>}
+          {body && <p className="asset-rationale-body">{renderInline(body)}</p>}
+        </div>
       )}
     </div>
   )
@@ -78,7 +110,7 @@ export default function Dashboard() {
   const [livePrices, setLivePrices] = useState({})
   const [wsStatus, setWsStatus] = useState('connecting')
 
-  // Fetch portfolio on mount (JWT required)
+  // Fetch portfolio on mount (JWT required), then seed last close prices
   useEffect(() => {
     async function fetchPortfolio() {
       try {
@@ -91,7 +123,18 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(`Server error: ${res.status}`)
         const portfolios = await res.json()
         if (portfolios.length === 0) throw new Error('No portfolio found. Complete onboarding first.')
-        setPortfolio(portfolios[portfolios.length - 1])
+        const latest = portfolios[portfolios.length - 1]
+        setPortfolio(latest)
+
+        // Pre-fill with last close prices so cards always show something
+        const tickers = latest.assets.map((a) => a.ticker).join(',')
+        if (tickers) {
+          const priceRes = await fetch(`${API}/api/last-prices?tickers=${tickers}`)
+          if (priceRes.ok) {
+            const prices = await priceRes.json()
+            setLivePrices(prices)
+          }
+        }
       } catch (err) {
         setError(err.message)
       } finally {

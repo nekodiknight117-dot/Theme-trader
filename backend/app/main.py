@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,8 +9,8 @@ from contextlib import asynccontextmanager
 from . import models, schemas, crud
 from .database import engine, get_db, run_sqlite_migrations
 from .security import create_access_token, get_current_user, hash_password, verify_password
-from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream
-from .stock_selector import get_algorithmic_portfolio
+from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream, update_stream_tickers
+from .stock_selector import get_algorithmic_portfolio, get_last_close_prices
 from .tavily_research import get_company_research
 from .llm_service import generate_investment_rationale, parse_user_interests
 from .cache_service import get_cached_value, set_cached_value
@@ -121,6 +122,10 @@ async def run_assessment(
         
     # 1. Select portfolio algorithmically, personalised by user interests
     raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
+
+    # Update the Alpaca stream to watch the actual portfolio tickers
+    portfolio_tickers = [a["ticker"] for a in raw_portfolio]
+    asyncio.create_task(update_stream_tickers(portfolio_tickers))
     
     # Create the portfolio in DB
     portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"
@@ -158,10 +163,11 @@ async def run_assessment(
         
         # 4. Save to Database
         crud.add_asset_to_portfolio(
-            db=db, 
-            portfolio_id=db_portfolio.id, 
-            ticker=ticker, 
-            category=category, 
+            db=db,
+            portfolio_id=db_portfolio.id,
+            ticker=ticker,
+            name=asset_data.get("company_name", ticker),
+            category=category,
             rationale=rationale
         )
         
@@ -206,6 +212,19 @@ def get_portfolios_for_user(user_id: int, db: Session = Depends(get_db)):
 @app.post("/users/{user_id}/portfolios/", response_model=schemas.Portfolio)
 def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):
     return crud.create_portfolio(db=db, user_id=user_id, name=portfolio.name)
+
+# --- Last Close Prices Endpoint ---
+
+@app.get("/api/last-prices")
+def last_prices(tickers: str):
+    """
+    Returns the most recent closing price for a comma-separated list of tickers.
+    Useful when the market is closed and the live stream has no data.
+    Example: /api/last-prices?tickers=AAPL,V,MA
+    """
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    return get_last_close_prices(ticker_list)
+
 
 # --- Realtime WebSocket Endpoint ---
 

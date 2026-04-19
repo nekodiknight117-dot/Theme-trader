@@ -125,8 +125,18 @@ async def start_alpaca_stream(tickers: list[str] = DEFAULT_TICKERS) -> None:
         )
         return
 
-    logger.info("[alpaca_stream] Starting Alpaca market data stream for %s", tickers)
+    print(f"[alpaca_stream] Starting Alpaca market data stream for {tickers}")
     _stream_task = asyncio.create_task(_run_stream(api_key, secret_key, tickers))
+
+
+async def update_stream_tickers(tickers: list[str]) -> None:
+    """
+    Call this after a portfolio is created to re-subscribe the stream to the
+    actual portfolio tickers instead of the hardcoded defaults.
+    """
+    print(f"[alpaca_stream] Updating stream tickers to: {tickers}")
+    await stop_alpaca_stream()
+    await start_alpaca_stream(tickers)
 
 
 async def stop_alpaca_stream() -> None:
