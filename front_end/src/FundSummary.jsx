@@ -27,6 +27,12 @@ function pct(value) {
   return `${sign}${v.toFixed(2)}%`
 }
 
+function roundTo2(value) {
+  const v = Number(value)
+  if (!Number.isFinite(v)) return null
+  return Math.round(v * 100) / 100
+}
+
 function fmtUsd(value) {
   const v = Number(value)
   if (value == null || !Number.isFinite(v)) return '—'
@@ -61,10 +67,13 @@ function ReturnBadge({ value }) {
   return <span className={`return-badge ${cls}`}>{pct(v)}</span>
 }
 
-function PerfPair({ pctVal, dollarShare }) {
+function PerfPair({ pctVal, baseValue }) {
   const pv = pctVal == null ? null : Number(pctVal)
-  const ds = dollarShare == null ? null : Number(dollarShare)
+  const bv = baseValue == null ? null : Number(baseValue)
   const hasPv = pv != null && Number.isFinite(pv)
+  const shownPct = hasPv ? roundTo2(pv) : null
+  const ds =
+    shownPct != null && bv != null && Number.isFinite(bv) ? (bv * shownPct) / 100 : null
   const hasDs = ds != null && Number.isFinite(ds)
   if (!hasPv && !hasDs) {
     return (
@@ -73,14 +82,15 @@ function PerfPair({ pctVal, dollarShare }) {
       </span>
     )
   }
-  const cls = hasPv ? (pv >= 0 ? 'return-badge--pos' : 'return-badge--neg') : 'return-badge--neutral'
-  const pctStr = hasPv ? pct(pv) : '—'
+  const cls = hasPv ? (shownPct >= 0 ? 'return-badge--pos' : 'return-badge--neg') : 'return-badge--neutral'
+  const pctStr = hasPv ? pct(shownPct) : '—'
   const usdStr = hasDs ? fmtUsd(ds) : '—'
   return (
     <span className="perf-pair">
       <span className={`return-badge ${cls}`}>{pctStr}</span>
-      <span className="perf-dollar">{usdStr}</span>
-      <span className="perf-dollar-hint">/ sh</span>
+      <span className={`return-badge ${cls} return-badge--money`}>
+        {hasDs ? `${usdStr} / sh` : '—'}
+      </span>
     </span>
   )
 }
@@ -169,8 +179,15 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
 
   /** Beta-weighted portfolio P/L on a $10,000 notional. */
   const notionalTotal = 10000
+  const shownFundReturnPct = fundReturn != null ? roundTo2(fundReturn) : null
+  const fundReturnDollar =
+    shownFundReturnPct != null ? (notionalTotal * shownFundReturnPct) / 100 : null
+  const shownFundExpectedPct = fundExpectedReturn != null ? roundTo2(fundExpectedReturn) : null
+  const fundExpectedDollar =
+    shownFundExpectedPct != null ? (notionalTotal * shownFundExpectedPct) / 100 : null
+  const shownFundPeriodPct = fundPeriodPct != null ? roundTo2(fundPeriodPct) : null
   const fundPeriodDollar =
-    fundPeriodPct != null ? (notionalTotal * fundPeriodPct) / 100 : null
+    shownFundPeriodPct != null ? (notionalTotal * shownFundPeriodPct) / 100 : null
 
   // Category weights = sum of individual asset weights per category
   const catWeights = {}
@@ -186,12 +203,36 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
       <div className="fund-summary-top">
         <div className="fund-kpi">
           <span className="fund-kpi-label">Today&apos;s Return</span>
-          <ReturnBadge value={fundReturn} />
+          {fundReturn != null ? (
+            <div className="fund-period-stack">
+              <ReturnBadge value={shownFundReturnPct} />
+              <span
+                className={`return-badge return-badge--money ${
+                  fundReturnDollar != null && fundReturnDollar >= 0 ? 'fund-dollar-pl--pos' : 'fund-dollar-pl--neg'
+                }`}
+              >
+                {fundReturnDollar != null ? fmtUsd(fundReturnDollar) : '—'}
+                {' on $10k'}
+              </span>
+            </div>
+          ) : (
+            <span className="fund-kpi-loading">—</span>
+          )}
         </div>
         <div className="fund-kpi fund-kpi--highlight">
           <span className="fund-kpi-label">Expected Return (1Y)</span>
           {fundExpectedReturn != null ? (
-            <ReturnBadge value={fundExpectedReturn} />
+            <div className="fund-period-stack">
+              <ReturnBadge value={shownFundExpectedPct} />
+              <span
+                className={`return-badge return-badge--money ${
+                  fundExpectedDollar != null && fundExpectedDollar >= 0 ? 'fund-dollar-pl--pos' : 'fund-dollar-pl--neg'
+                }`}
+              >
+                {fundExpectedDollar != null ? fmtUsd(fundExpectedDollar) : '—'}
+                {' on $10k'}
+              </span>
+            </div>
           ) : (
             <span className="fund-kpi-loading">Calculating…</span>
           )}
@@ -200,14 +241,14 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
           <span className="fund-kpi-label">Period ({periodLabel})</span>
           {fundPeriodPct != null ? (
             <div className="fund-period-stack">
-              <ReturnBadge value={fundPeriodPct} />
+              <ReturnBadge value={shownFundPeriodPct} />
               <span
-                className={`fund-dollar-pl ${
+                className={`return-badge return-badge--money ${
                   fundPeriodDollar != null && fundPeriodDollar >= 0 ? 'fund-dollar-pl--pos' : 'fund-dollar-pl--neg'
                 }`}
               >
                 {fundPeriodDollar != null ? fmtUsd(fundPeriodDollar) : '—'}
-                <span className="fund-dollar-pl-hint"> on $10k</span>
+                {' on $10k'}
               </span>
             </div>
           ) : (
@@ -283,8 +324,14 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
             <span>Ticker</span>
             <span>Price</span>
             <span>Prev Close</span>
-            <span>Today</span>
-            <span>Expected (1Y)</span>
+            <span>
+              Today
+              <span className="header-sub"> % · $/sh</span>
+            </span>
+            <span>
+              Expected (1Y)
+              <span className="header-sub"> % · $/sh</span>
+            </span>
             <span>
               Period ({periodLabel})
               <span className="header-sub"> % · $/sh</span>
@@ -319,9 +366,9 @@ export default function FundSummary({ assets: assetsIn, prevClose, expectedRetur
                 <span className="asset-return-prev">
                   {pc != null && Number.isFinite(Number(pc)) ? `$${Number(pc).toFixed(2)}` : '—'}
                 </span>
-                <ReturnBadge value={ret} />
-                <ReturnBadge value={exp} />
-                <PerfPair pctVal={pp?.pct ?? null} dollarShare={pp?.dollar_per_share ?? null} />
+                <PerfPair pctVal={ret} baseValue={pc ?? null} />
+                <PerfPair pctVal={exp} baseValue={cur ?? null} />
+                <PerfPair pctVal={pp?.pct ?? null} baseValue={pp?.first_close ?? null} />
                 <span className="asset-metric">{fmtVolume(f.volume)}</span>
                 <span className="asset-metric">{fmtMarketCap(f.market_cap)}</span>
                 <span className="asset-metric">
