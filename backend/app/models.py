@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -31,9 +31,29 @@ class Asset(Base):
     ticker = Column(String, index=True)
     name = Column(String)
     category = Column(String)  # e.g., "ETF", "Blue Chip", "IPO", "Rising Star"
-    rationale = Column(String) # AI generated reason to invest
-    
+    rationale = Column(String)  # Legacy combined copy for older clients
+    theme_rationale = Column(String, nullable=True)
+    financial_rationale = Column(String, nullable=True)
+
     portfolio = relationship("Portfolio", back_populates="assets")
+
+
+class TickerFinancialCache(Base):
+    """Financial thesis keyed by ticker + risk + category (shared across users)."""
+
+    __tablename__ = "ticker_financial_cache"
+    __table_args__ = (
+        UniqueConstraint("ticker", "risk_tolerance", "category", name="uq_ticker_financial_key"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String, index=True)
+    risk_tolerance = Column(String)
+    category = Column(String)
+    company_name = Column(String, default="")
+    financial_rationale = Column(String, default="")
+    financial_updated_at = Column(DateTime(timezone=True), nullable=True)
+
 
 class CacheEntry(Base):
     __tablename__ = "cache_entries"

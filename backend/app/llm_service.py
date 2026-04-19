@@ -50,6 +50,97 @@ async def _post(payload: dict) -> dict:
         return response.json()
 
 
+FINANCIAL_UNAVAILABLE = "Financial rationale is temporarily unavailable."
+THEME_UNAVAILABLE = "Theme rationale is temporarily unavailable."
+
+
+async def generate_financial_rationale(
+    ticker: str,
+    category: str,
+    quantitative_data: dict,
+    qualitative_research: str,
+    risk_tolerance: str,
+) -> str:
+    """
+    Investment thesis from metrics and research only — no user hobby list.
+    Intended to be cached per (ticker, risk, category) across users.
+    """
+    system_prompt = (
+        "You are an expert financial analyst for Theme-Trader. Write a concise financial rationale "
+        "(one or two short paragraphs) for this asset: focus on recent performance context, risk level "
+        "for the stated portfolio risk band, and what the qualitative research implies for the business. "
+        "Do not mention the user's personal interests or hobbies."
+    )
+    user_prompt = (
+        f"Asset: {ticker} (Category: {category})\n"
+        f"Portfolio risk band (for context): {risk_tolerance}\n\n"
+        f"Quantitative Data (Recent 6-month metrics):\n"
+        f"- Projected CAGR / Return: {quantitative_data.get('projected_cagr', 'N/A')}\n"
+        f"- Volatility: {quantitative_data.get('volatility', 'N/A')}\n\n"
+        f"Qualitative Research (Recent News/Business Model):\n{qualitative_research}\n\n"
+        "Keep it professional and factual. No markdown headings."
+    )
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.65,
+        "max_tokens": 280,
+    }
+    try:
+        data = await _post(payload)
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[llm_service] Error generating financial rationale for {ticker}: {e}")
+        return FINANCIAL_UNAVAILABLE
+
+
+async def generate_theme_overlap_rationale(
+    ticker: str,
+    category: str,
+    interest_tags: list[str],
+    company_name: str,
+    financial_rationale: str,
+    risk_tolerance: str,
+) -> str:
+    """
+    Why this holding fits the user's themes — stress overlap between their interest tags and the company.
+    """
+    tags_display = ", ".join(interest_tags) if interest_tags else "(no specific themes listed)"
+    system_prompt = (
+        "You are a financial onboarding assistant for Theme-Trader. Write one short paragraph explaining "
+        "why this investment aligns with the user's stated interest themes. "
+        "Explicitly name which theme(s) overlap with what the company or fund actually does — "
+        "the intersection matters, not a generic pitch. Do not repeat the full financial thesis; "
+        "reference it only if needed. No markdown headings."
+    )
+    user_prompt = (
+        f"Ticker: {ticker} | Category: {category}\n"
+        f"Company or fund name: {company_name}\n"
+        f"User's interest themes: {tags_display}\n"
+        f"User risk tolerance label: {risk_tolerance}\n\n"
+        f"Financial summary (for context only):\n{financial_rationale[:1200]}\n\n"
+        "Write the overlap paragraph."
+    )
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 220,
+    }
+    try:
+        data = await _post(payload)
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[llm_service] Error generating theme rationale for {ticker}: {e}")
+        return THEME_UNAVAILABLE
+
+
 async def generate_investment_rationale(
     ticker: str,
     category: str,
@@ -58,42 +149,29 @@ async def generate_investment_rationale(
     risk_tolerance: str,
     interests: str,
 ) -> str:
-    """Synthesizes financial data and qualitative research into a personalized pitch."""
-    system_prompt = (
-        "You are an expert financial advisor for Theme-Trader. Your job is to write a short, engaging, "
-        "and personalized investment rationale (1-2 paragraphs) for a specific stock/asset. "
-        "Combine the hard financial numbers with the qualitative research provided to pitch this to the user."
+    """Backward-compatible combined string: theme overlap + financial (two LLM calls)."""
+    from .interests_util import interest_tags
+
+    tags = interest_tags(interests)
+    fin = await generate_financial_rationale(
+        ticker=ticker,
+        category=category,
+        quantitative_data=quantitative_data,
+        qualitative_research=qualitative_research,
+        risk_tolerance=risk_tolerance,
     )
-
-    user_prompt = (
-        f"Asset: {ticker} (Category: {category})\n"
-        f"User's Interests: {interests}\n"
-        f"User Risk Tolerance: {risk_tolerance}\n\n"
-        f"Quantitative Data (Recent 6-month metrics):\n"
-        f"- Projected CAGR / Return: {quantitative_data.get('projected_cagr', 'N/A')}\n"
-        f"- Volatility: {quantitative_data.get('volatility', 'N/A')}\n\n"
-        f"Qualitative Research (Recent News/Business Model):\n{qualitative_research}\n\n"
-        "Write a compelling rationale on why the user should invest in this asset, "
-        "tying together the financial metrics and the qualitative news/research. "
-        "Keep it concise, professional, but exciting."
+    theme = await generate_theme_overlap_rationale(
+        ticker=ticker,
+        category=category,
+        interest_tags=tags,
+        company_name=ticker,
+        financial_rationale=fin,
+        risk_tolerance=risk_tolerance,
     )
-
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
-        ],
-        "temperature": 0.7,
-        "max_tokens": 300,
-    }
-
-    try:
-        data = await _post(payload)
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"[llm_service] Error generating rationale for {ticker}: {e}")
-        return "Rationale generation is temporarily unavailable."
+    t, f = theme.strip(), fin.strip()
+    if t and f:
+        return f"{t}\n\n{f}"
+    return t or f
 
 
 async def parse_user_interests(raw_text: str) -> dict:

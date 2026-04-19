@@ -1,3 +1,5 @@
+import os
+from datetime import datetime, timedelta, timezone
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +13,24 @@ from .security import create_access_token, get_current_user, hash_password, veri
 from .alpaca_stream import active_connections, start_alpaca_stream, stop_alpaca_stream
 from .stock_selector import get_algorithmic_portfolio
 from .tavily_research import get_company_research
-from .llm_service import generate_investment_rationale, parse_user_interests
+from .llm_service import (
+    FINANCIAL_UNAVAILABLE,
+    generate_financial_rationale,
+    generate_theme_overlap_rationale,
+    parse_user_interests,
+)
+from .interests_util import interest_tags, normalize_risk
 from .cache_service import get_cached_value, set_cached_value
+
+
+def _financial_cache_fresh(updated_at: datetime | None, ttl_hours: float) -> bool:
+    if updated_at is None:
+        return False
+    now = datetime.now(timezone.utc)
+    ts = updated_at
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return now - ts < timedelta(hours=ttl_hours)
 
 # Create the database tables and apply SQLite migrations
 models.Base.metadata.create_all(bind=engine)
@@ -118,51 +136,80 @@ async def run_assessment(
     Core pipeline: Authenticated user; algorithmic selection, Tavily research, LLM rationale, new portfolio.
     """
     user = current
-        
+
+    fin_ttl = float(os.getenv("FINANCIAL_RATIONALE_TTL_HOURS", "72"))
+    risk_norm = normalize_risk(user.risk_tolerance)
+    tags = interest_tags(user.interests or "")
+
     # 1. Select portfolio algorithmically, personalised by user interests
     raw_portfolio = await get_algorithmic_portfolio(user.risk_tolerance, interests=user.interests or "")
-    
+
     # Create the portfolio in DB
     portfolio_name = f"{user.risk_tolerance.capitalize()} Risk Theme Portfolio"
     db_portfolio = crud.create_portfolio(db=db, user_id=user.id, name=portfolio_name)
-    
-    # Process each asset: fetch research, generate rationale, and save
-    # Note: Running these sequentially for simplicity, but could be gathered concurrently with asyncio.gather
+
     for asset_data in raw_portfolio:
         ticker = asset_data["ticker"]
         category = asset_data["category"]
-        
-        # 2. Get Qualitative Research (with Caching)
-        cache_key_tavily = f"tavily:{ticker}"
-        research = get_cached_value(db, cache_key_tavily)
-        if not research:
-            research = get_company_research(ticker, category)
-            if research and not research.startswith("Error") and not research.startswith("Could not"):
-                set_cached_value(db, cache_key_tavily, research, ttl_hours=24)
-        
-        # 3. Generate LLM Pitch (with Caching — keyed by ticker + risk + interests)
-        interests_slug = (user.interests or "")[:50]  # cap length for key safety
-        cache_key_llm = f"llm:rationale:{ticker}:{user.risk_tolerance}:{interests_slug}"
-        rationale = get_cached_value(db, cache_key_llm)
-        if not rationale:
-            rationale = await generate_investment_rationale(
-                ticker=ticker, 
-                category=category, 
-                quantitative_data=asset_data, 
-                qualitative_research=research, 
+        company_name = asset_data.get("company_name") or ticker
+
+        cached = crud.get_ticker_financial_cache(db, ticker, risk_norm, category)
+        research = ""
+        financial_text = ""
+        used_financial_cache = (
+            cached
+            and cached.financial_rationale
+            and _financial_cache_fresh(cached.financial_updated_at, fin_ttl)
+            and FINANCIAL_UNAVAILABLE.lower() not in cached.financial_rationale.lower()
+        )
+
+        if used_financial_cache:
+            financial_text = cached.financial_rationale
+            if cached.company_name:
+                company_name = cached.company_name
+        else:
+            cache_key_tavily = f"tavily:{ticker}"
+            research = get_cached_value(db, cache_key_tavily)
+            if not research:
+                research = get_company_research(ticker, category)
+                if research and not research.startswith("Error") and not research.startswith("Could not"):
+                    set_cached_value(db, cache_key_tavily, research, ttl_hours=24)
+
+            financial_text = await generate_financial_rationale(
+                ticker=ticker,
+                category=category,
+                quantitative_data=asset_data,
+                qualitative_research=research or "",
                 risk_tolerance=user.risk_tolerance,
-                interests=user.interests or "",
             )
-            if rationale and "temporarily unavailable" not in rationale.lower():
-                set_cached_value(db, cache_key_llm, rationale, ttl_hours=24)
-        
-        # 4. Save to Database
+            if financial_text and FINANCIAL_UNAVAILABLE.lower() not in financial_text.lower():
+                crud.upsert_ticker_financial_cache(
+                    db=db,
+                    ticker=ticker,
+                    risk_tolerance=risk_norm,
+                    category=category,
+                    company_name=company_name,
+                    financial_rationale=financial_text,
+                    updated_at=datetime.now(timezone.utc),
+                )
+
+        theme_text = await generate_theme_overlap_rationale(
+            ticker=ticker,
+            category=category,
+            interest_tags=tags,
+            company_name=company_name,
+            financial_rationale=financial_text,
+            risk_tolerance=user.risk_tolerance,
+        )
+
         crud.add_asset_to_portfolio(
-            db=db, 
-            portfolio_id=db_portfolio.id, 
-            ticker=ticker, 
-            category=category, 
-            rationale=rationale
+            db=db,
+            portfolio_id=db_portfolio.id,
+            ticker=ticker,
+            category=category,
+            name=company_name,
+            theme_rationale=theme_text,
+            financial_rationale=financial_text,
         )
         
     # Return the newly hydrated portfolio
