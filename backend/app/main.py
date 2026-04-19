@@ -39,7 +39,10 @@ run_sqlite_migrations()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from pathlib import Path
+    import warnings
     import dotenv
+    # yfinance/pandas deprecations inside third-party code — keep logs readable locally
+    warnings.filterwarnings("ignore", message=".*utcnow is deprecated.*")
     # Explicitly load root-level .env regardless of where uvicorn is launched from
     _root_env = Path(__file__).resolve().parents[2] / ".env"
     dotenv.load_dotenv(dotenv_path=_root_env, override=True)
@@ -104,6 +107,7 @@ def read_me(current: models.UserProfile = Depends(get_current_user)):
 
 
 @app.get("/users/me/portfolios/", response_model=List[schemas.Portfolio])
+@app.get("/users/me/portfolios", response_model=List[schemas.Portfolio])
 def get_my_portfolios(
     db: Session = Depends(get_db),
     current: models.UserProfile = Depends(get_current_user),
@@ -315,6 +319,200 @@ async def get_expected_return(tickers: str):
             cagr = (float(closes.iloc[-1]) / float(closes.iloc[0])) ** (252 / n_days) - 1
             if not math.isnan(cagr) and not math.isinf(cagr):
                 result[sym] = round(cagr * 100, 2)  # as percentage
+        except Exception:
+            pass
+
+    return result
+
+
+def _yf_period_history(sym: str, period_key: str):
+    """Daily closes for `sym` over the named window. Returns None on failure."""
+    import yfinance as yf
+
+    tk = yf.Ticker(sym)
+    try:
+        if period_key == "ytd":
+            now = datetime.now(timezone.utc)
+            start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+            hist = tk.history(start=start.strftime("%Y-%m-%d"), interval="1d", auto_adjust=True)
+        elif period_key == "3m":
+            hist = tk.history(period="3mo", interval="1d", auto_adjust=True)
+        elif period_key == "6m":
+            hist = tk.history(period="6mo", interval="1d", auto_adjust=True)
+        elif period_key == "1y":
+            hist = tk.history(period="1y", interval="1d", auto_adjust=True)
+        elif period_key == "5y":
+            hist = tk.history(period="5y", interval="1d", auto_adjust=True)
+        elif period_key == "10y":
+            hist = tk.history(period="10y", interval="1d", auto_adjust=True)
+        elif period_key == "max":
+            hist = tk.history(period="max", interval="1d", auto_adjust=True)
+        else:
+            return None
+
+        if hist is None or hist.empty:
+            return None
+        closes = hist["Close"].dropna()
+        return closes if len(closes) >= 1 else None
+    except Exception:
+        return None
+
+
+@app.get("/api/period-performance")
+async def get_period_performance(tickers: str, period: str = "1y"):
+    """
+    Total return over a calendar window using daily closes (yfinance).
+
+    `period` is one of: ytd, 3m, 6m, 1y, 5y, 10y, max
+
+    For each ticker returns:
+      - pct: percent change from first to last close in window
+      - dollar_per_share: last_close - first_close
+      - first_close, last_close: boundary closes used
+    """
+    import math
+
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    pk = period.strip().lower()
+    allowed = {"ytd", "3m", "6m", "1y", "5y", "10y", "max"}
+    if not symbols:
+        return {}
+    if pk not in allowed:
+        raise HTTPException(status_code=400, detail=f"period must be one of {sorted(allowed)}")
+
+    result = {}
+    for sym in symbols:
+        closes = _yf_period_history(sym, pk)
+        if closes is None or len(closes) < 2:
+            continue
+        try:
+            first_c = float(closes.iloc[0])
+            last_c = float(closes.iloc[-1])
+            if first_c == 0 or math.isnan(first_c) or math.isnan(last_c):
+                continue
+            pct = (last_c / first_c - 1.0) * 100.0
+            d_share = last_c - first_c
+            if math.isnan(pct) or math.isinf(pct):
+                continue
+            result[sym] = {
+                "pct": round(pct, 2),
+                "dollar_per_share": round(d_share, 4),
+                "first_close": round(first_c, 4),
+                "last_close": round(last_c, 4),
+            }
+        except Exception:
+            pass
+
+    return result
+
+
+@app.get("/api/fundamentals")
+async def get_fundamentals(tickers: str):
+    """
+    Lightweight snapshot per ticker: volume, market cap, dividend yield, beta, 52w range.
+    """
+    import math
+    import yfinance as yf
+
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not symbols:
+        return {}
+
+    out = {}
+    for sym in symbols:
+        row = {
+            "volume": None,
+            "market_cap": None,
+            "dividend_yield_pct": None,
+            "beta": None,
+            "week_52_high": None,
+            "week_52_low": None,
+        }
+        try:
+            tk = yf.Ticker(sym)
+            info = tk.info if hasattr(tk, "info") else {}
+            if not isinstance(info, dict):
+                info = {}
+
+            vol = info.get("volume") or info.get("regularMarketVolume") or info.get("averageVolume")
+            if vol is not None:
+                v = float(vol)
+                if not math.isnan(v):
+                    row["volume"] = int(v)
+
+            mc = info.get("marketCap")
+            if mc is not None:
+                m = float(mc)
+                if not math.isnan(m):
+                    row["market_cap"] = m
+
+            dy = info.get("dividendYield")
+            if dy is not None:
+                d = float(dy)
+                if not math.isnan(d):
+                    # yfinance often returns a ratio (0.02); normalize to percent
+                    row["dividend_yield_pct"] = round(d * 100.0, 3) if d <= 1.0 else round(d, 3)
+
+            b = info.get("beta")
+            if b is not None:
+                bf = float(b)
+                if not math.isnan(bf):
+                    row["beta"] = round(bf, 3)
+
+            hi = info.get("fiftyTwoWeekHigh") or info.get("52WeekHigh")
+            lo = info.get("fiftyTwoWeekLow") or info.get("52WeekLow")
+            if hi is not None:
+                h = float(hi)
+                if not math.isnan(h):
+                    row["week_52_high"] = round(h, 4)
+            if lo is not None:
+                l = float(lo)
+                if not math.isnan(l):
+                    row["week_52_low"] = round(l, 4)
+        except Exception:
+            pass
+
+        out[sym] = row
+
+    return out
+
+
+@app.get("/api/last-prices")
+async def get_last_prices(tickers: str):
+    """
+    Latest trade / last price per ticker (yfinance fast_info, with daily fallback).
+    Seeds dashboard price cells before the live WebSocket connects.
+
+    Example: /api/last-prices?tickers=AAPL,NVDA,SPY
+    """
+    import yfinance as yf
+    import math
+
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not symbols:
+        return {}
+
+    result = {}
+    for sym in symbols:
+        try:
+            tk = yf.Ticker(sym)
+            fi = tk.fast_info
+            last = (
+                fi.get("last_price")
+                or fi.get("lastPrice")
+                or fi.get("regular_market_price")
+                or fi.get("regularMarketPrice")
+            )
+            if last is not None:
+                lf = float(last)
+                if not math.isnan(lf):
+                    result[sym] = round(lf, 4)
+                    continue
+            hist = tk.history(period="5d", interval="1d")
+            if not hist.empty:
+                lc = float(hist["Close"].iloc[-1])
+                if not math.isnan(lc):
+                    result[sym] = round(lc, 4)
         except Exception:
             pass
 

@@ -5,6 +5,7 @@ import OnboardingForm from './OnboardingForm.jsx'
 import Dashboard from './Dashboard.jsx'
 import Login from './Login.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import RouteErrorBoundary from './RouteErrorBoundary.jsx'
 import { CATEGORY_META } from './categoryMeta.js'
 
 const API = 'http://localhost:8000'
@@ -293,7 +294,9 @@ export default function App() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <RouteErrorBoundary>
+              <Dashboard />
+            </RouteErrorBoundary>
           </ProtectedRoute>
         }
       />

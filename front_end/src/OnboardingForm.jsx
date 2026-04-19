@@ -196,9 +196,29 @@ export default function OnboardingForm() {
                 <span className="review-value">{username}</span>
               </div>
               <div className="review-row">
-                <span className="review-label">Investment themes</span>
-                <span className="review-value">{parsed.interests}</span>
+                <span className="review-label">Investment angles</span>
+                <span className="review-value">
+                  {parsed.investment_themes || parsed.interests || '—'}
+                </span>
               </div>
+              {parsed.education && (
+                <div className="review-row">
+                  <span className="review-label">Education</span>
+                  <span className="review-value">{parsed.education}</span>
+                </div>
+              )}
+              {parsed.employment && (
+                <div className="review-row">
+                  <span className="review-label">Career</span>
+                  <span className="review-value">{parsed.employment}</span>
+                </div>
+              )}
+              {parsed.hobbies && (
+                <div className="review-row">
+                  <span className="review-label">Hobbies</span>
+                  <span className="review-value">{parsed.hobbies}</span>
+                </div>
+              )}
               <div className="review-row">
                 <span className="review-label">Inferred goal</span>
                 <span className="review-value goal-badge">{parsed.investment_goals}</span>
@@ -207,6 +227,9 @@ export default function OnboardingForm() {
                 <span className="review-label">Risk tolerance</span>
                 <span className="review-value risk-badge">{riskTolerance}</span>
               </div>
+              <p className="review-footnote">
+                Your themes plus education, career, and hobbies are saved on your profile and used to pick holdings.
+              </p>
             </div>
 
             {error && <p className="form-error">{error}</p>}

@@ -1,75 +1,197 @@
+import { useEffect, useMemo, useState } from 'react'
+
+const API = 'http://localhost:8000'
+
 const CATEGORY_META = {
-  'ETF':         { emoji: '📊', color: '#3b82f6' },
-  'Blue Chip':   { emoji: '💎', color: '#10b981' },
+  ETF: { emoji: '📊', color: '#3b82f6' },
+  'Blue Chip': { emoji: '💎', color: '#10b981' },
   'Rising Star': { emoji: '🚀', color: '#f59e0b' },
-  'IPO':         { emoji: '✨', color: '#ec4899' },
+  IPO: { emoji: '✨', color: '#ec4899' },
 }
 
+/** @type {{ id: string, label: string }[]} */
+export const PERFORMANCE_PERIODS = [
+  { id: 'ytd', label: 'YTD' },
+  { id: '3m', label: '3M' },
+  { id: '6m', label: '6M' },
+  { id: '1y', label: '1Y' },
+  { id: '5y', label: '5Y' },
+  { id: '10y', label: '10Y' },
+  { id: 'max', label: 'Max' },
+]
+
 function pct(value) {
-  const sign = value >= 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}%`
+  const v = Number(value)
+  if (!Number.isFinite(v)) return '—'
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}%`
+}
+
+function fmtUsd(value) {
+  const v = Number(value)
+  if (value == null || !Number.isFinite(v)) return '—'
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}$${Math.abs(v).toFixed(2)}`
+}
+
+function fmtVolume(n) {
+  const v = Number(n)
+  if (n == null || !Number.isFinite(v)) return '—'
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`
+  return String(Math.round(v))
+}
+
+function fmtMarketCap(n) {
+  const v = Number(n)
+  if (n == null || !Number.isFinite(v)) return '—'
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
+  return `$${Math.round(v)}`
 }
 
 function ReturnBadge({ value }) {
-  if (value == null) return <span className="return-badge return-badge--neutral">—</span>
-  const cls = value >= 0 ? 'return-badge--pos' : 'return-badge--neg'
-  return <span className={`return-badge ${cls}`}>{pct(value)}</span>
+  const v = Number(value)
+  if (value == null || !Number.isFinite(v)) {
+    return <span className="return-badge return-badge--neutral">—</span>
+  }
+  const cls = v >= 0 ? 'return-badge--pos' : 'return-badge--neg'
+  return <span className={`return-badge ${cls}`}>{pct(v)}</span>
 }
 
-export default function FundSummary({ assets, prevClose, expectedReturn = {}, livePrices, seedBarsRef }) {
+function PerfPair({ pctVal, dollarShare }) {
+  const pv = pctVal == null ? null : Number(pctVal)
+  const ds = dollarShare == null ? null : Number(dollarShare)
+  const hasPv = pv != null && Number.isFinite(pv)
+  const hasDs = ds != null && Number.isFinite(ds)
+  if (!hasPv && !hasDs) {
+    return (
+      <span className="perf-pair">
+        <span className="return-badge return-badge--neutral">—</span>
+      </span>
+    )
+  }
+  const cls = hasPv ? (pv >= 0 ? 'return-badge--pos' : 'return-badge--neg') : 'return-badge--neutral'
+  const pctStr = hasPv ? pct(pv) : '—'
+  const usdStr = hasDs ? fmtUsd(ds) : '—'
+  return (
+    <span className="perf-pair">
+      <span className={`return-badge ${cls}`}>{pctStr}</span>
+      <span className="perf-dollar">{usdStr}</span>
+      <span className="perf-dollar-hint">/ sh</span>
+    </span>
+  )
+}
+
+export default function FundSummary({ assets: assetsIn, prevClose, expectedReturn = {}, livePrices, seedBarsRef }) {
+  const assets = Array.isArray(assetsIn) ? assetsIn : []
   const n = assets.length
+  const [period, setPeriod] = useState('1y')
+  const [periodPerf, setPeriodPerf] = useState({})
+  const [fundamentals, setFundamentals] = useState({})
+
+  const tickerKey = useMemo(() => assets.map((a) => a.ticker).sort().join(','), [assets])
+
+  useEffect(() => {
+    if (!tickerKey) return
+    const enc = encodeURIComponent(tickerKey)
+    fetch(`${API}/api/period-performance?tickers=${enc}&period=${encodeURIComponent(period)}`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setPeriodPerf)
+      .catch(() => setPeriodPerf({}))
+
+    fetch(`${API}/api/fundamentals?tickers=${enc}`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setFundamentals)
+      .catch(() => setFundamentals({}))
+  }, [tickerKey, period])
+
   if (n === 0) return null
 
-  // --- per-asset current price: live > last seed bar > null ---
   function currentPrice(ticker) {
-    if (livePrices[ticker] != null) return livePrices[ticker]
+    if (livePrices[ticker] != null) {
+      const v = Number(livePrices[ticker])
+      return Number.isFinite(v) ? v : null
+    }
     const bars = seedBarsRef?.current?.[ticker]
-    if (bars && bars.length > 0) return bars[bars.length - 1].value
+    if (bars && bars.length > 0) {
+      const v = Number(bars[bars.length - 1].value)
+      return Number.isFinite(v) ? v : null
+    }
     return null
   }
 
-  // --- per-asset daily return ---
   function assetReturn(ticker) {
     const cur = currentPrice(ticker)
-    const pc = prevClose[ticker]
-    if (cur == null || pc == null || pc === 0) return null
+    const pc = Number(prevClose[ticker])
+    if (cur == null || !Number.isFinite(pc) || pc === 0) return null
     return ((cur - pc) / pc) * 100
   }
 
-  // --- equal-weighted fund daily return ---
   const returns = assets.map((a) => assetReturn(a.ticker)).filter((r) => r != null)
-  const fundReturn = returns.length > 0
-    ? returns.reduce((s, r) => s + r, 0) / returns.length
-    : null
+  const fundReturn = returns.length > 0 ? returns.reduce((s, r) => s + r, 0) / returns.length : null
 
-  // --- equal-weighted fund expected return (1Y CAGR) ---
-  const expReturns = assets.map((a) => expectedReturn[a.ticker]).filter((r) => r != null)
-  const fundExpectedReturn = expReturns.length > 0
-    ? expReturns.reduce((s, r) => s + r, 0) / expReturns.length
-    : null
+  const expReturns = assets
+    .map((a) => expectedReturn[a.ticker])
+    .map((r) => Number(r))
+    .filter((r) => Number.isFinite(r))
+  const fundExpectedReturn =
+    expReturns.length > 0 ? expReturns.reduce((s, r) => s + r, 0) / expReturns.length : null
 
-  // --- category allocation (equal weight per asset) ---
+  const perfPcts = assets
+    .map((a) => periodPerf[a.ticker]?.pct)
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x))
+  const fundPeriodPct =
+    perfPcts.length > 0 ? perfPcts.reduce((s, x) => s + x, 0) / perfPcts.length : null
+
+  /** Equal-weight portfolio P/L on a $10,000 notional (arithmetic average of asset % returns). */
+  const notionalTotal = 10000
+  const fundPeriodDollar =
+    fundPeriodPct != null ? (notionalTotal * fundPeriodPct) / 100 : null
+
   const catCounts = {}
   for (const a of assets) {
     catCounts[a.category] = (catCounts[a.category] || 0) + 1
   }
-  const catOrder = Object.keys(catCounts).sort(
-    (a, b) => catCounts[b] - catCounts[a]
-  )
+  const catOrder = Object.keys(catCounts).sort((a, b) => catCounts[b] - catCounts[a])
+
+  const periodLabel = PERFORMANCE_PERIODS.find((p) => p.id === period)?.label ?? period.toUpperCase()
 
   return (
     <div className="fund-summary">
-      {/* ── top row ── */}
       <div className="fund-summary-top">
         <div className="fund-kpi">
-          <span className="fund-kpi-label">Today's Return</span>
+          <span className="fund-kpi-label">Today&apos;s Return</span>
           <ReturnBadge value={fundReturn} />
         </div>
         <div className="fund-kpi fund-kpi--highlight">
           <span className="fund-kpi-label">Expected Return (1Y)</span>
-          {fundExpectedReturn != null
-            ? <ReturnBadge value={fundExpectedReturn} />
-            : <span className="fund-kpi-loading">Calculating…</span>}
+          {fundExpectedReturn != null ? (
+            <ReturnBadge value={fundExpectedReturn} />
+          ) : (
+            <span className="fund-kpi-loading">Calculating…</span>
+          )}
+        </div>
+        <div className="fund-kpi fund-kpi--highlight fund-kpi--period">
+          <span className="fund-kpi-label">Period ({periodLabel})</span>
+          {fundPeriodPct != null ? (
+            <div className="fund-period-stack">
+              <ReturnBadge value={fundPeriodPct} />
+              <span
+                className={`fund-dollar-pl ${
+                  fundPeriodDollar != null && fundPeriodDollar >= 0 ? 'fund-dollar-pl--pos' : 'fund-dollar-pl--neg'
+                }`}
+              >
+                {fundPeriodDollar != null ? fmtUsd(fundPeriodDollar) : '—'}
+                <span className="fund-dollar-pl-hint"> on $10k</span>
+              </span>
+            </div>
+          ) : (
+            <span className="fund-kpi-loading">—</span>
+          )}
         </div>
         <div className="fund-kpi">
           <span className="fund-kpi-label">Assets</span>
@@ -81,7 +203,25 @@ export default function FundSummary({ assets, prevClose, expectedReturn = {}, li
         </div>
       </div>
 
-      {/* ── allocation bar ── */}
+      <div className="period-selector-row">
+        <span className="period-selector-label">Performance window</span>
+        <div className="period-selector" role="tablist" aria-label="Performance time window">
+          {PERFORMANCE_PERIODS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={period === p.id}
+              className={`period-pill${period === p.id ? ' period-pill--active' : ''}`}
+              onClick={() => setPeriod(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <span className="period-footnote">Daily closes (yfinance). Shown next to expected return in the table.</span>
+      </div>
+
       <div className="alloc-section">
         <span className="alloc-label">Allocation by Category</span>
         <div className="alloc-bar">
@@ -105,7 +245,9 @@ export default function FundSummary({ assets, prevClose, expectedReturn = {}, li
             return (
               <div key={cat} className="alloc-legend-item">
                 <span className="alloc-dot" style={{ background: meta.color }} />
-                <span className="alloc-legend-name">{meta.emoji} {cat}</span>
+                <span className="alloc-legend-name">
+                  {meta.emoji} {cat}
+                </span>
                 <span className="alloc-legend-pct">{weight.toFixed(1)}%</span>
               </div>
             )
@@ -113,16 +255,24 @@ export default function FundSummary({ assets, prevClose, expectedReturn = {}, li
         </div>
       </div>
 
-      {/* ── per-asset return table ── */}
       <div className="asset-returns">
         <span className="alloc-label">Individual Returns</span>
-        <div className="asset-returns-table">
+        <div className="asset-returns-table asset-returns-table--wide">
           <div className="asset-returns-header">
             <span>Ticker</span>
             <span>Price</span>
             <span>Prev Close</span>
             <span>Today</span>
             <span>Expected (1Y)</span>
+            <span>
+              Period ({periodLabel})
+              <span className="header-sub"> % · $/sh</span>
+            </span>
+            <span>Vol</span>
+            <span>Mkt cap</span>
+            <span>Div %</span>
+            <span>Beta</span>
+            <span>52w range</span>
           </div>
           {assets.map((a) => {
             const ret = assetReturn(a.ticker)
@@ -130,19 +280,37 @@ export default function FundSummary({ assets, prevClose, expectedReturn = {}, li
             const cur = currentPrice(a.ticker)
             const pc = prevClose[a.ticker]
             const meta = CATEGORY_META[a.category] || { color: '#7c3aed' }
+            const pp = periodPerf[a.ticker]
+            const f = fundamentals[a.ticker] || {}
+            const hi = Number(f.week_52_high)
+            const lo = Number(f.week_52_low)
+            const range52 =
+              Number.isFinite(hi) && Number.isFinite(lo) ? `${hi.toFixed(0)} / ${lo.toFixed(0)}` : '—'
             return (
               <div key={a.ticker} className="asset-return-row">
                 <span className="asset-return-ticker" style={{ color: meta.color }}>
                   {a.ticker}
                 </span>
                 <span className="asset-return-price">
-                  {cur != null ? `$${cur.toFixed(2)}` : '—'}
+                  {cur != null ? `$${Number(cur).toFixed(2)}` : '—'}
                 </span>
                 <span className="asset-return-prev">
-                  {pc != null ? `$${pc.toFixed(2)}` : '—'}
+                  {pc != null && Number.isFinite(Number(pc)) ? `$${Number(pc).toFixed(2)}` : '—'}
                 </span>
                 <ReturnBadge value={ret} />
                 <ReturnBadge value={exp} />
+                <PerfPair pctVal={pp?.pct ?? null} dollarShare={pp?.dollar_per_share ?? null} />
+                <span className="asset-metric">{fmtVolume(f.volume)}</span>
+                <span className="asset-metric">{fmtMarketCap(f.market_cap)}</span>
+                <span className="asset-metric">
+                  {Number.isFinite(Number(f.dividend_yield_pct))
+                    ? `${Number(f.dividend_yield_pct).toFixed(2)}%`
+                    : '—'}
+                </span>
+                <span className="asset-metric">
+                  {Number.isFinite(Number(f.beta)) ? Number(f.beta).toFixed(2) : '—'}
+                </span>
+                <span className="asset-metric asset-metric--tight">{range52}</span>
               </div>
             )
           })}
