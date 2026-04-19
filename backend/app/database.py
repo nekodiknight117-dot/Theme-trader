@@ -26,6 +26,15 @@ def run_sqlite_migrations() -> None:
             conn.execute(text("ALTER TABLE user_profiles ADD COLUMN password_hash VARCHAR"))
             conn.commit()
 
+        rows = conn.execute(text("PRAGMA table_info(assets)")).fetchall()
+        cols = {r[1] for r in rows}
+        if "theme_rationale" not in cols:
+            conn.execute(text("ALTER TABLE assets ADD COLUMN theme_rationale VARCHAR"))
+            conn.commit()
+        if "financial_rationale" not in cols:
+            conn.execute(text("ALTER TABLE assets ADD COLUMN financial_rationale VARCHAR"))
+            conn.commit()
+
 Base = declarative_base()
 
 # Dependency to get the database session

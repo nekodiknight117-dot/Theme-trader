@@ -35,6 +35,8 @@ class AssetBase(BaseModel):
     name: Optional[str] = None
     category: str
     rationale: Optional[str] = None
+    theme_rationale: Optional[str] = None
+    financial_rationale: Optional[str] = None
 
 class AssetCreate(AssetBase):
     pass
