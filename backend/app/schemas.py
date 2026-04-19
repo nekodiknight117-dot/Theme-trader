@@ -32,6 +32,7 @@ class AuthResponse(BaseModel):
 
 class AssetBase(BaseModel):
     ticker: str
+    name: Optional[str] = None
     category: str
     rationale: Optional[str] = None
 

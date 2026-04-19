@@ -207,6 +207,123 @@ def get_portfolios_for_user(user_id: int, db: Session = Depends(get_db)):
 def create_portfolio_for_user(user_id: int, portfolio: schemas.PortfolioCreate, db: Session = Depends(get_db)):
     return crud.create_portfolio(db=db, user_id=user_id, name=portfolio.name)
 
+# --- Market Data Endpoints ---
+
+@app.get("/api/expected-return")
+async def get_expected_return(tickers: str):
+    """
+    Returns the annualised 1-year CAGR for each ticker based on the past 252
+    trading days of daily closes from yfinance.
+
+    Formula: CAGR = (P_last / P_first) ^ (252 / n_days) - 1
+    Returned as a percentage, e.g. 12.3 means +12.3 % per year.
+
+    Example: /api/expected-return?tickers=AAPL,NVDA,SPY
+    """
+    import yfinance as yf
+    import math
+
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not symbols:
+        return {}
+
+    result = {}
+    for sym in symbols:
+        try:
+            hist = yf.Ticker(sym).history(period="1y", interval="1d")
+            closes = hist["Close"].dropna()
+            if len(closes) < 2:
+                continue
+            n_days = len(closes)
+            cagr = (float(closes.iloc[-1]) / float(closes.iloc[0])) ** (252 / n_days) - 1
+            if not math.isnan(cagr) and not math.isinf(cagr):
+                result[sym] = round(cagr * 100, 2)  # as percentage
+        except Exception:
+            pass
+
+    return result
+
+
+@app.get("/api/prev-close")
+async def get_prev_close(tickers: str):
+    """
+    Returns the previous trading day's closing price for a comma-separated list
+    of tickers. Uses yfinance's fast_info so only one network call per symbol.
+    Example: /api/prev-close?tickers=AAPL,NVDA,SPY
+    """
+    import yfinance as yf
+    import math
+
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not symbols:
+        return {}
+
+    result = {}
+    for sym in symbols:
+        try:
+            tk = yf.Ticker(sym)
+            pc = tk.fast_info.get("previousClose") or tk.fast_info.get("previous_close")
+            if pc is not None and not math.isnan(float(pc)):
+                result[sym] = round(float(pc), 4)
+            else:
+                # fallback: last close from 5-day daily history
+                hist = tk.history(period="5d", interval="1d")
+                if not hist.empty:
+                    result[sym] = round(float(hist["Close"].iloc[-1]), 4)
+        except Exception:
+            pass
+
+    return result
+
+
+# --- Historical Bars Endpoint ---
+
+@app.get("/api/bars/{ticker}")
+async def get_bars(ticker: str):
+    """
+    Returns minute-level OHLCV bars for the most recent trading session.
+    Uses yfinance so no Alpaca credentials are required.
+    Falls back to daily bars if intraday data is unavailable.
+    """
+    import yfinance as yf
+    import math
+
+    sym = ticker.upper()
+    try:
+        tk = yf.Ticker(sym)
+        # "1d" period with "1m" interval gives today's intraday bars (or the
+        # last trading day's bars when the market is closed).
+        hist = tk.history(period="1d", interval="1m")
+
+        if hist.empty:
+            # Fallback: 5-day daily closes so the chart always has something
+            hist = tk.history(period="5d", interval="1d")
+            if hist.empty:
+                return {"ticker": sym, "bars": [], "source": "none"}
+            bars = [
+                {
+                    "time": int(row.Index.timestamp()),
+                    "value": round(float(row.Close), 4),
+                }
+                for row in hist.itertuples()
+                if not math.isnan(row.Close)
+            ]
+            return {"ticker": sym, "bars": bars, "source": "daily"}
+
+        bars = [
+            {
+                "time": int(row.Index.timestamp()),
+                "value": round(float(row.Close), 4),
+            }
+            for row in hist.itertuples()
+            if not math.isnan(row.Close)
+        ]
+        return {"ticker": sym, "bars": bars, "source": "intraday"}
+
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch bars for {sym}: {exc}")
+
+
 # --- Realtime WebSocket Endpoint ---
 
 @app.websocket("/ws/prices")

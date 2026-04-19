@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext.jsx'
+import PriceChart from './PriceChart.jsx'
+import FundSummary from './FundSummary.jsx'
 import './Dashboard.css'
 
 const API = 'http://localhost:8000'
@@ -24,14 +26,43 @@ function groupByCategory(assets) {
   return groups
 }
 
+// Renders a string with **bold** markers into React elements
+function renderInline(text) {
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  )
+}
+
+// Splits rationale into an optional heading line + body paragraphs
+function parseRationale(text) {
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
+  let heading = null
+  let bodyLines = lines
+
+  // If the first line is entirely wrapped in ** it's a heading
+  if (/^\*\*.+\*\*$/.test(lines[0])) {
+    heading = lines[0].replace(/^\*\*|\*\*$/g, '')
+    bodyLines = lines.slice(1)
+  }
+
+  return { heading, body: bodyLines.join(' ') }
+}
+
 function AssetCard({ asset, livePrice }) {
   const meta = CATEGORY_META[asset.category] || { emoji: '📈', color: '#7c3aed' }
+  const { heading, body } = asset.rationale ? parseRationale(asset.rationale) : {}
 
   return (
     <div className="asset-card">
       <div className="asset-card-header">
         <div className="asset-ticker-row">
-          <span className="asset-ticker">{asset.ticker}</span>
+          <div className="asset-ticker-group">
+            <span className="asset-ticker">{asset.ticker}</span>
+            {asset.name && asset.name !== asset.ticker && (
+              <span className="asset-company-name">{asset.name}</span>
+            )}
+          </div>
           {livePrice != null && (
             <span className="asset-live-price">${livePrice.toFixed(2)}</span>
           )}
@@ -41,7 +72,10 @@ function AssetCard({ asset, livePrice }) {
         </span>
       </div>
       {asset.rationale && (
-        <p className="asset-rationale">{asset.rationale}</p>
+        <div className="asset-rationale">
+          {heading && <p className="asset-rationale-heading">{heading}</p>}
+          {body && <p className="asset-rationale-body">{renderInline(body)}</p>}
+        </div>
       )}
     </div>
   )
@@ -77,8 +111,15 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [livePrices, setLivePrices] = useState({})
   const [wsStatus, setWsStatus] = useState('connecting')
+  const [selectedTicker, setSelectedTicker] = useState(null)
+  const priceHistoryRef = useRef({})       // live ticks accumulated per ticker
+  const seedBarsRef = useRef({})           // historical bars fetched from backend
+  const [priceHistory, setPriceHistory] = useState([])
+  const [barsLoading, setBarsLoading] = useState(false)
+  const [prevClose, setPrevClose] = useState({})
+  const [expectedReturn, setExpectedReturn] = useState({})
 
-  // Fetch portfolio on mount (JWT required)
+  // Fetch portfolio on mount (JWT required), then seed last close prices
   useEffect(() => {
     async function fetchPortfolio() {
       try {
@@ -91,7 +132,18 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(`Server error: ${res.status}`)
         const portfolios = await res.json()
         if (portfolios.length === 0) throw new Error('No portfolio found. Complete onboarding first.')
-        setPortfolio(portfolios[portfolios.length - 1])
+        const latest = portfolios[portfolios.length - 1]
+        setPortfolio(latest)
+
+        // Pre-fill with last close prices so cards always show something
+        const tickers = latest.assets.map((a) => a.ticker).join(',')
+        if (tickers) {
+          const priceRes = await fetch(`${API}/api/last-prices?tickers=${tickers}`)
+          if (priceRes.ok) {
+            const prices = await priceRes.json()
+            setLivePrices(prices)
+          }
+        }
       } catch (err) {
         setError(err.message)
       } finally {
@@ -100,6 +152,23 @@ export default function Dashboard() {
     }
     if (token) fetchPortfolio()
   }, [token, authHeader, logout, navigate])
+
+  // Fetch previous-close and expected-return for all portfolio tickers
+  useEffect(() => {
+    if (!portfolio || portfolio.assets.length === 0) return
+    const tickers = portfolio.assets.map((a) => a.ticker).join(',')
+    const encoded = encodeURIComponent(tickers)
+
+    fetch(`${API}/api/prev-close?tickers=${encoded}`)
+      .then((r) => r.ok ? r.json() : {})
+      .then((data) => setPrevClose(data))
+      .catch(() => {})
+
+    fetch(`${API}/api/expected-return?tickers=${encoded}`)
+      .then((r) => r.ok ? r.json() : {})
+      .then((data) => setExpectedReturn(data))
+      .catch(() => {})
+  }, [portfolio])
 
   // WebSocket for live prices
   useEffect(() => {
@@ -114,6 +183,29 @@ export default function Dashboard() {
         const data = JSON.parse(event.data)
         if (data.ticker && data.price != null) {
           setLivePrices((prev) => ({ ...prev, [data.ticker]: data.price }))
+
+          const timestamp = Math.floor(Date.now() / 1000)
+          const ticker = data.ticker
+          if (!priceHistoryRef.current[ticker]) {
+            priceHistoryRef.current[ticker] = []
+          }
+          const hist = priceHistoryRef.current[ticker]
+          if (hist.length === 0 || hist[hist.length - 1].time !== timestamp) {
+            hist.push({ time: timestamp, value: data.price })
+          } else {
+            hist[hist.length - 1].value = data.price
+          }
+
+          setSelectedTicker((cur) => {
+            if (cur === ticker) {
+              const seed = seedBarsRef.current[ticker] || []
+              const live = priceHistoryRef.current[ticker] || []
+              const liveStart = live[0]?.time ?? Infinity
+              const filtered = seed.filter((p) => p.time < liveStart)
+              setPriceHistory([...filtered, ...live])
+            }
+            return cur
+          })
         }
       } catch {
         // ignore malformed messages
@@ -155,6 +247,43 @@ export default function Dashboard() {
   ]
 
   const totalAssets = portfolio.assets.length
+  const allTickers = portfolio.assets.map((a) => a.ticker)
+
+  function mergedHistory(ticker) {
+    const seed = seedBarsRef.current[ticker] || []
+    const live = priceHistoryRef.current[ticker] || []
+    if (live.length === 0) return seed
+
+    // Drop seed points that overlap with live data to avoid duplicate timestamps
+    const liveStart = live[0].time
+    const filtered = seed.filter((p) => p.time < liveStart)
+    return [...filtered, ...live]
+  }
+
+  async function handleSelectTicker(ticker) {
+    setSelectedTicker(ticker)
+    setBarsLoading(true)
+
+    // Show whatever live data we already have immediately
+    setPriceHistory(mergedHistory(ticker))
+
+    // Fetch historical bars if not yet cached
+    if (!seedBarsRef.current[ticker]) {
+      try {
+        const res = await fetch(`${API}/api/bars/${ticker}`)
+        if (res.ok) {
+          const json = await res.json()
+          seedBarsRef.current[ticker] = json.bars || []
+        }
+      } catch {
+        // silently fall through — chart will just show live data
+      }
+    }
+
+    setBarsLoading(false)
+    // Re-merge now that seed bars are loaded
+    setPriceHistory(mergedHistory(ticker))
+  }
 
   return (
     <div className="dashboard-page">
@@ -175,6 +304,50 @@ export default function Dashboard() {
               {wsStatus === 'connected' ? 'Live prices' : wsStatus === 'connecting' ? 'Connecting…' : 'Prices offline'}
             </span>
           </div>
+        </div>
+
+        <FundSummary
+          assets={portfolio.assets}
+          prevClose={prevClose}
+          expectedReturn={expectedReturn}
+          livePrices={livePrices}
+          seedBarsRef={seedBarsRef}
+        />
+
+        <div className="chart-section">
+          <div className="chart-section-header">
+            <h2 className="chart-section-title">Live Price Chart</h2>
+            <div className="ticker-selector">
+              {allTickers.map((ticker) => {
+                const asset = portfolio.assets.find((a) => a.ticker === ticker)
+                const meta = CATEGORY_META[asset?.category] || { color: '#7c3aed' }
+                return (
+                  <button
+                    key={ticker}
+                    className={`ticker-btn${selectedTicker === ticker ? ' ticker-btn--active' : ''}`}
+                    style={selectedTicker === ticker ? { borderColor: meta.color, color: meta.color, background: `${meta.color}18` } : {}}
+                    onClick={() => handleSelectTicker(ticker)}
+                  >
+                    {ticker}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {selectedTicker ? (
+            <PriceChart
+              key={selectedTicker}
+              ticker={selectedTicker}
+              priceHistory={priceHistory}
+              loading={barsLoading}
+              color={CATEGORY_META[portfolio.assets.find((a) => a.ticker === selectedTicker)?.category]?.color ?? '#3b82f6'}
+            />
+          ) : (
+            <div className="chart-placeholder">
+              <span>Select a ticker above to view its price chart</span>
+            </div>
+          )}
         </div>
 
         {orderedCategories.map((cat) => (

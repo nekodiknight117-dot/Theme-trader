@@ -11,14 +11,42 @@ STOCK_UNIVERSE = {
     "Rising Star": ["NVDA", "AMD", "SMCI", "PLTR", "CRWD", "SNOW", "TSLA", "META"],
 }
 
+def _flatten_tickers(tickers) -> List[str]:
+    """Ensure tickers is a flat list of strings, handling any nested lists the LLM may return."""
+    flat = []
+    for t in tickers:
+        if isinstance(t, list):
+            flat.extend(str(x).strip().upper() for x in t if x)
+        elif isinstance(t, str) and t.strip():
+            flat.append(t.strip().upper())
+    return flat
+
+
+def fetch_company_names(tickers: List[str]) -> Dict[str, str]:
+    """Returns a dict of {ticker: company short name} using yfinance. Falls back to the ticker itself on any error."""
+    names = {}
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).info
+            names[ticker] = info.get("shortName") or info.get("longName") or ticker
+        except Exception:
+            names[ticker] = ticker
+    return names
+
+
 def fetch_metrics(tickers: List[str]) -> pd.DataFrame:
     """
     Fetches 6-month historical data for a list of tickers and calculates:
     - 6-month return
     - Volatility (Standard deviation of daily returns)
     """
-    # Fetch data as a single batch for speed
-    data = yf.download(tickers, period="6mo", group_by="ticker", auto_adjust=True, threads=True)
+    tickers = _flatten_tickers(tickers)
+    if not tickers:
+        return pd.DataFrame()
+
+    # Pass as space-separated string — yfinance 0.2.x handles lists inconsistently
+    tickers_str = " ".join(tickers) if len(tickers) > 1 else tickers[0]
+    data = yf.download(tickers_str, period="6mo", group_by="ticker", auto_adjust=True, threads=True)
     
     metrics = []
     
@@ -112,7 +140,43 @@ async def get_algorithmic_portfolio(risk_tolerance: str, interests: str = "") ->
                 "volatility":     row["volatility"],
             })
 
+    # Attach human-readable company names
+    all_tickers = [a["ticker"] for a in portfolio]
+    names = fetch_company_names(all_tickers)
+    for asset in portfolio:
+        asset["company_name"] = names.get(asset["ticker"], asset["ticker"])
+
     return portfolio
+
+
+def get_last_close_prices(tickers: List[str]) -> Dict[str, float]:
+    """
+    Returns the most recent closing price for each ticker.
+    Works whether the market is open or closed — always uses the last available day.
+    """
+    tickers = _flatten_tickers(tickers)
+    if not tickers:
+        return {}
+
+    tickers_str = " ".join(tickers) if len(tickers) > 1 else tickers[0]
+    data = yf.download(tickers_str, period="5d", group_by="ticker", auto_adjust=True, progress=False)
+
+    prices = {}
+    if len(tickers) == 1:
+        ticker = tickers[0]
+        close = data["Close"].dropna()
+        if not close.empty:
+            prices[ticker] = round(float(close.iloc[-1]), 2)
+    else:
+        for ticker in tickers:
+            try:
+                close = data[ticker]["Close"].dropna()
+                if not close.empty:
+                    prices[ticker] = round(float(close.iloc[-1]), 2)
+            except Exception:
+                pass
+
+    return prices
 
 
 # Example usage if run directly
