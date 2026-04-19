@@ -8,11 +8,12 @@ async def test():
     
     print("\nTesting rationale generation for NVDA...")
     rationale = await generate_investment_rationale(
-        "NVDA", 
-        "Rising Star", 
-        {"projected_cagr": 0.5, "volatility": 0.4}, 
-        "Nvidia is leading the AI chip market.", 
-        "high"
+        "NVDA",
+        "Rising Star",
+        {"projected_cagr": 0.5, "volatility": 0.4},
+        "Nvidia is leading the AI chip market.",
+        "high",
+        "AI, semiconductors",
     )
     print(f"Rationale: {rationale}")
 

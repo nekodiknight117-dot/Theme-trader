@@ -216,6 +216,80 @@
   gap: 6px;
 }
 
+/* Theme vs financial — labeled panels + divider */
+.asset-rationale-split {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 2px;
+}
+
+.asset-rationale-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.asset-rationale-themes {
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.04));
+  border-color: rgba(165, 180, 252, 0.25);
+}
+
+.asset-rationale-financial {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.03));
+  border-color: rgba(110, 231, 183, 0.22);
+}
+
+.asset-rationale-divider {
+  border: none;
+  height: 1px;
+  margin: 12px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(165, 180, 252, 0.5) 15%,
+    rgba(110, 231, 183, 0.5) 85%,
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(110, 231, 183, 0.15);
+}
+
+.asset-rationale-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.asset-rationale-themes .asset-rationale-label {
+  color: #c7d2fe;
+  border-bottom-color: rgba(165, 180, 252, 0.35);
+}
+
+.asset-rationale-financial .asset-rationale-label {
+  color: #a7f3d0;
+  border-bottom-color: rgba(110, 231, 183, 0.35);
+}
+
+.asset-rationale-text {
+  font-size: 0.875rem;
+  color: var(--text-muted, #e5e7eb);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.asset-rationale-text strong {
+  color: var(--text, #f9fafb);
+  font-weight: 600;
+}
+
 .asset-rationale-heading {
   font-size: 0.8rem;
   font-weight: 700;

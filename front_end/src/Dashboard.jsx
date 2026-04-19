@@ -49,9 +49,64 @@ function parseRationale(text) {
   return { heading, body: bodyLines.join(' ') }
 }
 
+/**
+ * Theme + financial from API, or derived from legacy combined `rationale`
+ * (double newline, or pivot phrases like "From a financial perspective").
+ */
+function deriveThemeAndFinancial(asset) {
+  const apiTheme = (asset.theme_rationale || '').trim()
+  const apiFin = (asset.financial_rationale || '').trim()
+  if (apiTheme || apiFin) {
+    return { theme: apiTheme, financial: apiFin }
+  }
+
+  const raw = (asset.rationale || '').trim()
+  if (!raw) return null
+
+  const paras = raw.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+  if (paras.length >= 2) {
+    return { theme: paras[0], financial: paras.slice(1).join('\n\n') }
+  }
+
+  const pivot = raw.match(
+    /^([\s\S]+?)(\s+(?:From a financial perspective|Beyond the numbers|Financially,|On the financial side|From a numbers perspective|The numbers (?:are|tell|show))[\s\S]*)$/i
+  )
+  if (pivot) {
+    return { theme: pivot[1].trim(), financial: pivot[2].trim() }
+  }
+
+  return null
+}
+
+function RationaleSplitSections({ theme, financial }) {
+  const showTheme = Boolean(theme)
+  const showFin = Boolean(financial)
+  if (!showTheme && !showFin) return null
+
+  return (
+    <div className="asset-rationale asset-rationale-split">
+      {showTheme && (
+        <div className="asset-rationale-block asset-rationale-themes">
+          <span className="asset-rationale-label">Why it fits your interests</span>
+          <p className="asset-rationale-text">{renderInline(theme)}</p>
+        </div>
+      )}
+      {showTheme && showFin && <hr className="asset-rationale-divider" aria-hidden="true" />}
+      {showFin && (
+        <div className="asset-rationale-block asset-rationale-financial">
+          <span className="asset-rationale-label">Financial rationale</span>
+          <p className="asset-rationale-text">{renderInline(financial)}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AssetCard({ asset, livePrice }) {
   const meta = CATEGORY_META[asset.category] || { emoji: '📈', color: '#7c3aed' }
-  const { heading, body } = asset.rationale ? parseRationale(asset.rationale) : {}
+  const derived = deriveThemeAndFinancial(asset)
+  const { heading, body } =
+    !derived && asset.rationale ? parseRationale(asset.rationale) : {}
 
   return (
     <div className="asset-card">
@@ -71,11 +126,15 @@ function AssetCard({ asset, livePrice }) {
           {meta.emoji} {asset.category}
         </span>
       </div>
-      {asset.rationale && (
-        <div className="asset-rationale">
-          {heading && <p className="asset-rationale-heading">{heading}</p>}
-          {body && <p className="asset-rationale-body">{renderInline(body)}</p>}
-        </div>
+      {derived ? (
+        <RationaleSplitSections theme={derived.theme} financial={derived.financial} />
+      ) : (
+        asset.rationale && (
+          <div className="asset-rationale">
+            {heading && <p className="asset-rationale-heading">{heading}</p>}
+            {body && <p className="asset-rationale-body">{renderInline(body)}</p>}
+          </div>
+        )
       )}
     </div>
   )
