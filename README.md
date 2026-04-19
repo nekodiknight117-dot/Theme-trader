@@ -54,3 +54,5 @@ npm run dev
 | Research | Tavily Search API |
 | Market Data | Alpaca WebSocket stream, yfinance |
 | Package Manager | `uv` (Python), `npm` (Node) |
+
+![Theme Trader architecture diagram](theme_trader_architecture_diagram.png)
