@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext.jsx'
 import './OnboardingForm.css'
+import { API_URL } from './config.js'
 
-const API = 'http://localhost:8000'
+const API = API_URL
 
 export default function Login() {
   const navigate = useNavigate()

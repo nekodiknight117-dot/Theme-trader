@@ -7,8 +7,9 @@ import Login from './Login.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import RouteErrorBoundary from './RouteErrorBoundary.jsx'
 import { CATEGORY_META } from './categoryMeta.js'
+import { API_URL } from './config.js'
 
-const API = 'http://localhost:8000'
+const API = API_URL
 
 /** Shown when the DB has no assets yet or the API fails—matches dashboard category buckets. */
 const FALLBACK_LANDING_EXAMPLES = [

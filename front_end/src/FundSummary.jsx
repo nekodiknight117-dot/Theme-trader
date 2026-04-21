@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { API_URL } from './config.js'
 
-const API = 'http://localhost:8000'
+const API = API_URL
 
 const CATEGORY_META = {
   ETF: { emoji: '📊', color: '#3b82f6' },

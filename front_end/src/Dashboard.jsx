@@ -5,9 +5,9 @@ import PriceChart from './PriceChart.jsx'
 import FundSummary from './FundSummary.jsx'
 import './Dashboard.css'
 import { CATEGORY_ORDER, CATEGORY_META } from './categoryMeta.js'
+import { API_URL, WS_URL } from './config.js'
 
-const API = 'http://localhost:8000'
-const WS_URL = 'ws://localhost:8000/ws/prices'
+const API = API_URL
 
 const INDEX_SYMBOLS = { dji: '^DJI', spx: '^GSPC', ixic: '^IXIC' }
 
@@ -276,6 +276,11 @@ export default function Dashboard() {
 
   // WebSocket for live prices
   useEffect(() => {
+    if (!WS_URL) {
+      setWsStatus('disconnected')
+      return undefined
+    }
+
     const ws = new WebSocket(WS_URL)
 
     ws.onopen = () => setWsStatus('connected')

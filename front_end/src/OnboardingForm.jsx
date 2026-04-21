@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext.jsx'
 import './OnboardingForm.css'
+import { API_URL } from './config.js'
 
-const API = 'http://localhost:8000'
+const API = API_URL
 
 const STEP_TELL_US = 'tell-us'
 const STEP_REVIEW = 'review'
